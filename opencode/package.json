@@ -1,0 +1,44 @@
+{
+  "name": "opencode-exp-litellm",
+  "version": "1.0.0",
+  "description": "OpenCode V2 provider for an internal LiteLLM gateway",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./tui": {
+      "types": "./dist/tui.d.ts",
+      "default": "./dist/tui.js"
+    },
+    "./rpc": {
+      "types": "./dist/rpc.d.ts",
+      "default": "./dist/rpc.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@opencode/plugin": "2.3.0"
+  },
+  "peerDependencies": {
+    "solid-js": ">=1.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "solid-js": "^1.9.0",
+    "typescript": "^5.9.0"
+  }
+}

@@ -1,0 +1,140 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  buildCatalog,
+  GatewayDiscoveryClient,
+  parseModelInfo,
+  parseModelsList,
+} from "../src/discovery.ts";
+import { ExpDiscoveryError } from "../src/errors.ts";
+import { jsonResponse, modelInfoFixture, modelsFixture, REAL_MODEL_IDS } from "./fixtures.ts";
+
+const defaults = {
+  baseUrl: "https://gateway.test/v1/",
+  token: "fixture-secret-never-a-real-token",
+  defaultMaxTokens: 16_384,
+  timeoutMs: 100,
+};
+
+describe("gateway response parsing and model metadata", () => {
+  it("uses /models as the authoritative intersection and maps conservative metadata", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      return jsonResponse(url.endsWith("/models") ? modelsFixture : modelInfoFixture);
+    });
+    const client = new GatewayDiscoveryClient(fetchMock);
+    const models = await client.discover(defaults);
+
+    expect(models.map((model) => model.id)).toEqual(REAL_MODEL_IDS);
+    expect(models.some((model) => model.id === "MiniMax-M3")).toBe(false);
+    expect(models[0]).toMatchObject({
+      id: "Kimi-K3",
+      name: "Kimi-K3",
+      provider: "exp",
+      api: "openai-completions",
+      baseUrl: "https://gateway.test/v1",
+      input: ["text", "image"],
+      reasoning: false,
+      contextWindow: 200_000,
+      maxTokens: 32_768,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    });
+    expect(models.find((model) => model.id === "Kimi-K3.1-Pro")?.reasoning).toBe(true);
+    expect(models.find((model) => model.id === "Qwen3.8-27B")).toMatchObject({
+      input: ["text"],
+      reasoning: false,
+      maxTokens: 8_192,
+    });
+    // Every OpenAI-completions model retains normal Pi tool support.
+    expect(models.every((model) => model.api === "openai-completions")).toBe(true);
+  });
+
+  it("sends Bearer authentication to both routes without changing the catalog when info fails", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, ...(init ? { init } : {}) });
+      return url.endsWith("/models") ? jsonResponse(modelsFixture) : jsonResponse({ error: "ignored" }, 503);
+    });
+    const models = await new GatewayDiscoveryClient(fetchMock).discover(defaults);
+
+    expect(models).toHaveLength(REAL_MODEL_IDS.length);
+    expect(models.every((model) => model.input.join(",") === "text")).toBe(true);
+    expect(models.every((model) => model.maxTokens === 16_384)).toBe(true);
+    expect(calls.map((call) => call.url).sort()).toEqual([
+      "https://gateway.test/v1/model/info",
+      "https://gateway.test/v1/models",
+    ]);
+    for (const call of calls) {
+      expect(call.init?.headers).toMatchObject({ Authorization: `Bearer ${defaults.token}` });
+    }
+  });
+
+  it("supports numeric strings and clamps output limits to context", () => {
+    const listed = parseModelsList({ data: [{ id: "small", max_input_tokens: "1024" }] });
+    const info = new Map([
+      ["small", {
+        model_name: "small",
+        model_info: { max_output_tokens: "99999", supports_vision: true },
+      }],
+    ]);
+    expect(buildCatalog(listed, info, "https://gateway.test/v1", 16_384)[0]).toMatchObject({
+      contextWindow: 1024,
+      maxTokens: 1024,
+      input: ["text", "image"],
+    });
+  });
+
+  it("does not infer reasoning or vision from a model name", () => {
+    const listed = parseModelsList({ data: [{ id: "Kimi-K3.1-Pro-reasoning-vision" }] });
+    const [model] = buildCatalog(listed, new Map(), "https://gateway.test/v1", 16_384);
+    expect(model).toMatchObject({ reasoning: false, input: ["text"] });
+  });
+
+  it("ignores malformed optional info but rejects malformed authoritative models", () => {
+    expect(parseModelInfo({ nope: true }).size).toBe(0);
+    expect(() => parseModelsList({ data: [{ max_input_tokens: 100 }] })).toThrow(/valid id/);
+    expect(() => parseModelsList({ data: [{ id: "bad", max_input_tokens: "NaN" }] })).toThrow(
+      /max_input_tokens/,
+    );
+  });
+});
+
+describe("discovery failures and timeouts", () => {
+  it.each([401, 403])("reports HTTP %i clearly without exposing the token or response body", async (status) => {
+    const fetchMock = vi.fn(async () => jsonResponse({ error: defaults.token }, status));
+    const promise = new GatewayDiscoveryClient(fetchMock).discover(defaults);
+    await expect(promise).rejects.toMatchObject({ status, name: "ExpDiscoveryError" });
+    await expect(promise).rejects.toThrow(/\/login/);
+    await expect(promise).rejects.not.toThrow(defaults.token);
+  });
+
+  it("rejects a successful HTTP response with invalid authoritative JSON", async () => {
+    const fetchMock = vi.fn(async () => new Response("not-json"));
+    await expect(new GatewayDiscoveryClient(fetchMock).discover(defaults)).rejects.toThrow(/invalid JSON/);
+  });
+
+  it("bounds stalled requests with an explicit timeout", async () => {
+    const fetchMock = vi.fn((_input: string | URL | Request, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
+    });
+    const started = Date.now();
+    await expect(new GatewayDiscoveryClient(fetchMock).discover({ ...defaults, timeoutMs: 20 })).rejects.toThrow(
+      /timed out after 20 ms/,
+    );
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it("honors caller cancellation", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_input: string | URL | Request, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
+    });
+    const promise = new GatewayDiscoveryClient(fetchMock).discover({ ...defaults, signal: controller.signal });
+    controller.abort(new ExpDiscoveryError("cancelled by test"));
+    await expect(promise).rejects.toThrow("cancelled by test");
+  });
+});

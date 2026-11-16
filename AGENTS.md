@@ -9,6 +9,24 @@
 - Quando for solicitado um `research`, faça pesquisas em fóruns, reddit, publicações sobre o tema.
 - Só realizar o commit quando solicitado de forma explícita.
 
+## Desenvolvimento e validação
+
+Os pacotes são independentes e seus testes unitários não acessam o gateway real:
+
+```bash
+cd opencode && npm ci && npm test && npm run typecheck && npm run build
+cd pi && npm ci && npm test && npm run typecheck && npm run build
+
+uv venv .venv
+uv pip install --python .venv/bin/python -e './datasette-llm[dev]'
+.venv/bin/python -m pytest datasette-llm/tests -p no:cacheprovider
+uv build ./datasette-llm --out-dir /tmp/opencode/llm-exp-dist
+```
+
+Validações com `LITELLM_HOST` e `LITELLM_KEY` do `.env` devem usar diretórios
+temporários e configuração/credenciais isoladas das configurações pessoais.
+Nunca imprimir ou salvar tokens em logs, fixtures, caches e exemplos.
+
 ## Regras de commit
 
 Ao escrever uma mensagem de commit, siga estas 7 regras:
