@@ -10,7 +10,13 @@ from llm.default_plugins.openai_models import AsyncChat, Chat
 
 import llm_exp_gateway.plugin as plugin
 from llm_exp_gateway.gateway import DiscoveryError, RemoteModel
-from llm_exp_gateway.storage import cache_path, config_path, save_cached_catalog, save_endpoint
+from llm_exp_gateway.storage import (
+    DEFAULT_ENDPOINT,
+    cache_path,
+    config_path,
+    save_cached_catalog,
+    save_endpoint,
+)
 
 Registrations = list[tuple[Chat, AsyncChat | None]]
 
@@ -22,17 +28,64 @@ def collect_registrations(registrations: Registrations) -> Callable[..., None]:
     return register
 
 
-def test_hook_sem_configuracao_nao_faz_rede_nem_registra(
+def test_hook_sem_configuracao_e_sem_token_nativo_nao_faz_rede(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    monkeypatch.setenv("EXPLLM_KEY", "chave-manual-nao-deve-ser-lida")
+
     def unexpected_fetch(*args: object, **kwargs: object) -> list[RemoteModel]:
-        raise AssertionError("rede não deveria ser chamada")
+        raise AssertionError("rede não deveria ser chamada sem token nativo")
 
     monkeypatch.setattr(plugin, "fetch_catalog", unexpected_fetch)
     registrations: Registrations = []
     plugin.register_models(collect_registrations(registrations))
     assert registrations == []
-    assert capsys.readouterr().err == ""
+    captured = capsys.readouterr()
+    assert "token não configurado" in captured.err
+    assert "chave-manual-nao-deve-ser-lida" not in captured.err + captured.out
+    assert not config_path().exists()
+
+
+def test_hook_sem_configuracao_com_token_nativo_tenta_endpoint_padrao(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(plugin.llm, "get_key", lambda **kwargs: "segredo-nativo")
+    calls: list[tuple[str, str]] = []
+
+    def fake_fetch(base: str, key: str, timeout: float) -> list[RemoteModel]:
+        calls.append((base, key))
+        return [RemoteModel("Kimi-K3")]
+
+    monkeypatch.setattr(plugin, "fetch_catalog", fake_fetch)
+    registrations: Registrations = []
+    plugin.register_models(collect_registrations(registrations))
+
+    assert calls == [(DEFAULT_ENDPOINT, "segredo-nativo")]
+    assert [sync.api_base for sync, _ in registrations] == [DEFAULT_ENDPOINT]
+    assert not config_path().exists()
+    assert "segredo-nativo" not in cache_path().read_text(encoding="utf-8")
+
+
+def test_hook_com_ambiente_invalido_nao_faz_fallback_silencioso(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    api_base = "https://arquivo.example.com/v1"
+    save_endpoint(api_base)
+    save_cached_catalog(api_base, [RemoteModel("Kimi-K3")])
+    monkeypatch.setenv("EXPLLM_HOST", "://endereco-invalido")
+
+    def unexpected_call(*args: object, **kwargs: object) -> None:
+        raise AssertionError("ambiente inválido deve interromper a descoberta")
+
+    monkeypatch.setattr(plugin, "fetch_catalog", unexpected_call)
+    monkeypatch.setattr(plugin.llm, "get_key", unexpected_call)
+    registrations: Registrations = []
+    plugin.register_models(collect_registrations(registrations))
+
+    assert registrations == []
+    captured = capsys.readouterr()
+    assert "EXPLLM_HOST inválido" in captured.err
+    assert "endereco-invalido" not in captured.err + captured.out
 
 
 def test_hook_com_endpoint_sem_token_nao_faz_rede_e_usa_cache(
@@ -210,13 +263,15 @@ def test_configure_interativo_usa_chave_nativa_e_nao_vaza_token(
     result = CliRunner().invoke(
         plugin.exp,
         ["configure"],
-        input=f"https://gateway.example.com\n{token}\n",
+        input=f"{token}\n",
     )
     assert result.exit_code == 0, result.output
     assert token not in result.output
+    assert "Endpoint do gateway" not in result.output
     config_raw = config_path().read_text(encoding="utf-8")
     assert token not in config_raw
-    assert json.loads(config_raw)["api_base"] == "https://gateway.example.com/v1"
+    config = json.loads(config_raw)
+    assert config == {"version": 1, "api_base": DEFAULT_ENDPOINT}
     assert not cache_path().exists()
     assert llm.get_key(key_alias="exp", env_var="EXP_API_KEY") == token
     native_keys = isolated_llm_user_dir / "keys.json"
@@ -224,13 +279,19 @@ def test_configure_interativo_usa_chave_nativa_e_nao_vaza_token(
     assert native_keys.stat().st_mode & 0o777 == 0o600
 
 
-def test_configure_invalido_nao_salva_endpoint_nem_token() -> None:
+def test_configure_com_ambiente_invalido_nao_salva_nem_vaza_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = "segredo-configure"
+    monkeypatch.setenv("EXPLLM_HOST", "://endereco-invalido")
     result = CliRunner().invoke(
         plugin.exp,
         ["configure"],
-        input="endpoint-sem-esquema\nsegredo\n",
+        input=f"{token}\n",
     )
     assert result.exit_code != 0
-    assert "segredo" not in result.output
+    assert "EXPLLM_HOST inválido" in result.output
+    assert token not in result.output
+    assert "endereco-invalido" not in result.output
     assert not config_path().exists()
     assert not (config_path().parent / "keys.json").exists()

@@ -9,17 +9,10 @@ import click
 import llm
 from llm.default_plugins.openai_models import AsyncChat, Chat
 
-from .gateway import (
-    DEFAULT_TIMEOUT,
-    DiscoveryError,
-    RemoteModel,
-    fetch_catalog,
-    normalize_endpoint,
-)
+from .gateway import DEFAULT_TIMEOUT, DiscoveryError, RemoteModel, fetch_catalog
 from .storage import (
     ConfigurationError,
     configured_endpoint,
-    configured_endpoint_for_prompt,
     load_cached_catalog,
     save_cached_catalog,
     save_endpoint,
@@ -89,9 +82,6 @@ def register_models(register: Register) -> None:
     except (ConfigurationError, ValueError) as exc:
         _warn(str(exc))
         return
-    if api_base is None:
-        return
-
     cached = load_cached_catalog(api_base)
     try:
         api_key = llm.get_key(key_alias=KEY_ALIAS, env_var=KEY_ENV_VAR)
@@ -141,19 +131,14 @@ def exp() -> None:
 
 @exp.command(name="configure")
 def configure() -> None:
-    """Solicita endpoint e token sem exibir nem registrar o segredo."""
-    endpoint = click.prompt(
-        "Endpoint do gateway",
-        default=configured_endpoint_for_prompt(),
-        type=str,
-    )
+    """Solicita somente o token sem exibir nem registrar o segredo."""
     token = click.prompt("Token da API", hide_input=True, type=str)
-    try:
-        api_base = normalize_endpoint(endpoint)
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from None
     if not token:
         raise click.ClickException("O token não pode ser vazio.")
+    try:
+        api_base = configured_endpoint()
+    except (ConfigurationError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from None
     try:
         save_endpoint(api_base)
         _store_api_key(token)
@@ -162,8 +147,8 @@ def configure() -> None:
             f"Não foi possível salvar a configuração: {type(exc).__name__}."
         ) from None
     click.echo(
-        "Gateway configurado. O endpoint foi salvo e o token foi armazenado "
-        "no mecanismo nativo de chaves do llm com o nome 'exp'."
+        "Gateway configurado. O token foi armazenado no mecanismo nativo de "
+        "chaves do llm com o nome 'exp'."
     )
 
 

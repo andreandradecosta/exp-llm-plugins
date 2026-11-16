@@ -13,7 +13,8 @@ from .gateway import RemoteModel, normalize_endpoint
 
 CONFIG_FILENAME = "exp-gateway.json"
 CACHE_FILENAME = "exp-gateway-models.json"
-ENV_ENDPOINT = "EXP_LITELLM_HOST"
+ENV_ENDPOINT = "EXPLLM_HOST"
+DEFAULT_ENDPOINT = "http://pgeodsv1.ep.petrobras.com.br:4001/v1"
 
 
 class ConfigurationError(Exception):
@@ -53,14 +54,17 @@ def save_endpoint(api_base: str) -> None:
     _write_json_atomic(config_path(), {"version": 1, "api_base": api_base})
 
 
-def configured_endpoint() -> str | None:
-    """Resolve endpoint por ambiente ou configuração; ambiente tem precedência."""
+def configured_endpoint() -> str:
+    """Resolve o endpoint por ambiente, configuração persistida ou padrão."""
     environment_value = os.environ.get(ENV_ENDPOINT, "").strip()
     if environment_value:
-        return normalize_endpoint(environment_value)
+        try:
+            return normalize_endpoint(environment_value)
+        except ValueError as exc:
+            raise ConfigurationError(f"{ENV_ENDPOINT} inválido: {exc}") from None
     path = config_path()
     if not path.exists():
-        return None
+        return DEFAULT_ENDPOINT
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -75,14 +79,6 @@ def configured_endpoint() -> str | None:
         return normalize_endpoint(payload["api_base"])
     except ValueError as exc:
         raise ConfigurationError(str(exc)) from None
-
-
-def configured_endpoint_for_prompt() -> str | None:
-    """Obtém um default para o prompt sem impedir reparo da configuração."""
-    try:
-        return configured_endpoint()
-    except (ConfigurationError, ValueError):
-        return None
 
 
 def load_cached_catalog(api_base: str) -> list[RemoteModel] | None:

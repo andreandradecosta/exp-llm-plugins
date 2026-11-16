@@ -28,22 +28,57 @@ Os pacotes `@earendil-works/pi-coding-agent` e
 `@earendil-works/pi-ai` (inclusive o entrypoint `/compat`) são peers fornecidos
 pelo próprio Pi; não são incluídos como dependências de runtime do pacote.
 
-## Configuração global
+## Primeiro uso: instalar, autenticar e listar modelos
 
-A configuração é por usuário, no diretório retornado por `getAgentDir()` do Pi
-(normalmente `~/.pi/agent`, ou o valor de `PI_CODING_AGENT_DIR`). Nada é salvo no
-projeto.
+Uma instalação limpa não precisa de configuração de endpoint nem de variáveis de
+ambiente. O endpoint padrão é `http://pgeodsv1.ep.petrobras.com.br:4001`,
+normalizado internamente para
+`http://pgeodsv1.ep.petrobras.com.br:4001/v1`.
 
-1. Execute `/exp-configure` no Pi interativo.
-2. Informe o endpoint, com ou sem `/v1` e com ou sem barras finais. Informe
-   também o limite de saída padrão ou deixe o valor atual (inicialmente
-   `16384`).
-3. Execute `/login`, selecione o provider `exp` e digite o token no prompt
-   **secreto**. O Pi salva a credencial em `~/.pi/agent/auth.json` com seu
-   mecanismo nativo.
+Depois de instalar o pacote:
+
+1. Execute `/login` no Pi interativo e selecione o provider `exp`.
+2. Digite o token no prompt **secreto**. Não use `/exp-configure` nem argumentos
+   de shell para informar o token.
+3. O Pi salva a credencial por seu mecanismo nativo e a extensão descobre os
+   modelos automaticamente. Eles ficam disponíveis como `exp/<id>` na seleção de
+   modelos e em `pi --list-models`.
+
+O token é mantido exclusivamente pelo `/login` nativo. A extensão não carrega
+arquivos `.env` e não lê `EXPLLM_KEY`; definir essa variável não autentica o
+provider.
+
+### Precedência do endpoint
+
+Em cada operação de runtime, a resolução usa esta ordem:
+
+1. `EXPLLM_HOST`, quando não vazia;
+2. o `baseUrl` salvo por uma configuração avançada anterior;
+3. o endpoint padrão informado acima.
+
+Tanto o valor da variável quanto o valor salvo podem incluir ou omitir `/v1` e
+barras finais. Um `EXPLLM_HOST` definido, mas inválido, produz um erro de
+configuração: não há fallback silencioso para o valor salvo ou para o padrão.
+Exemplo de override sem configurar token pelo ambiente:
+
+```bash
+EXPLLM_HOST=http://outro-gateway.exemplo:4001 pi
+```
+
+A configuração opcional é por usuário, no diretório retornado por
+`getAgentDir()` do Pi (normalmente `~/.pi/agent`, ou o valor de
+`PI_CODING_AGENT_DIR`). Nada é salvo no projeto.
+
+### Configuração avançada opcional
+
+Use `/exp-configure` somente para alterar o endpoint salvo ou o limite de saída
+padrão (inicialmente `16384`). Esse comando não é necessário no primeiro uso.
+Se `EXPLLM_HOST` estiver ativo, ele permanece com precedência; o endpoint salvo
+será usado apenas quando a variável for removida ou esvaziada. As mensagens do
+comando deixam essa condição explícita.
 
 Em uma sessão interativa, salvar, trocar ou remover a credencial `exp` atualiza
-o catálogo e o registro do provider automaticamente: não é necessário repetir
+o catálogo e o registro do provider automaticamente: não é necessário executar
 `/exp-configure`, recarregar a sessão ou escolher outro modelo. A extensão
 observa o diretório de `auth.json` durante `session_start` para suportar escrita,
 criação e rename, agrupa eventos por 100 ms, relê a credencial nativa e executa
@@ -59,14 +94,15 @@ não iniciam watcher nem timers de sessão.
 
 Arquivos usados por esta extensão:
 
-- `exp-config.json`: endpoint normalizado, `defaultMaxTokens` e `timeoutMs`;
+- `exp-config.json`: arquivo opcional com endpoint normalizado,
+  `defaultMaxTokens` e `timeoutMs`;
 - `exp-models.json`: último catálogo EXP válido para fallback offline, sem
   token, headers ou credenciais;
 - `auth.json`: credencial mantida exclusivamente pelo armazenamento nativo do
   Pi. A extensão apenas relê a entrada `exp` na descoberta antecipada e após
   mudanças de credencial detectadas na sessão interativa.
 
-Também é possível revisar a configuração manualmente, por exemplo:
+Também é possível revisar a configuração avançada manualmente, por exemplo:
 
 ```json
 {
@@ -76,9 +112,7 @@ Também é possível revisar a configuração manualmente, por exemplo:
 }
 ```
 
-O timeout aceita valores entre 100 e 30000 ms. Não leia nem reutilize
-`LITELLM_KEY`: a extensão não consulta essa variável nem outra credencial de
-ambiente.
+O timeout aceita valores entre 100 e 30000 ms.
 
 ## Descoberta e metadados
 
@@ -116,10 +150,11 @@ A descoberta não altera o modelo padrão nem seleciona outro modelo.
 
 ## Inicialização, refresh e fallback
 
-A fábrica assíncrona aguarda uma leitura do cache e, quando endpoint e token já
-estão configurados, uma descoberta limitada por timeout antes de registrar o
-provider. Isso disponibiliza os modelos na seleção inicial e em
-`pi --list-models` sem deixar a inicialização indeterminada.
+A fábrica assíncrona aguarda uma leitura do cache e, quando o token nativo já
+está disponível, uma descoberta no endpoint efetivo limitada por timeout antes
+de registrar o provider. Isso disponibiliza os modelos na seleção inicial e em
+`pi --list-models` sem exigir `/exp-configure` nem deixar a inicialização
+indeterminada.
 
 O mesmo provider implementa `refreshModels(context)` e publica pelo
 `context.publish(...)` nativo, propagando `context.signal` ao HTTP. Atualizações
@@ -127,11 +162,14 @@ são substituições atômicas e protegidas por geração/cancelamento, portanto
 atualização antiga não sobrescreve uma mais recente.
 
 Em falha de rede, timeout, payload inválido ou erro HTTP, o último catálogo
-válido continua em memória. Na primeira inicialização, o fallback vem de
-`exp-models.json`; uma primeira falha sem cache é uma lista vazia e um erro
-claro. Respostas 401/403 indicam explicitamente `/login`. Uma falha de cache
-não impede uma nova leitura de rede. A persistência de refresh usa o storage
-nativo do Pi e a descoberta antecipada persiste o fallback EXP separado.
+válido para o endpoint efetivo continua em memória. Na primeira inicialização,
+o fallback vem de `exp-models.json`; entradas cujo `model.baseUrl` seja
+diferente do endpoint atual não são restauradas nem apresentadas, inclusive após
+uma troca por `EXPLLM_HOST`. Uma primeira falha sem cache compatível resulta em
+lista vazia e erro claro. Respostas 401/403 indicam explicitamente `/login`.
+Uma falha de cache não impede uma nova leitura de rede. A persistência de
+refresh usa o storage nativo do Pi e a descoberta antecipada persiste o fallback
+EXP separado.
 
 ## Desenvolvimento e testes
 
@@ -145,10 +183,13 @@ npm run build
 ```
 
 `npm test` executa contratos unitários com fetch, storage e credenciais
-injetados: parsing e interseção, URL, visão/reasoning/tools, auth secreta,
-cache, erros 401/403, timeout, cancelamento/concorrência, inicialização e
-configuração global em diretórios temporários sob `.test-tmp/`. Não há acesso
-a um gateway real nem escrita no `~/.pi/agent` verdadeiro durante os testes.
+injetados: instalação limpa com endpoint padrão, normalização e precedência de
+`EXPLLM_HOST`, rejeição de ambiente inválido, ausência de autenticação por
+`EXPLLM_KEY`, parsing e interseção, visão/reasoning/tools, auth secreta, cache
+isolado por endpoint, erros 401/403, timeout, cancelamento/concorrência,
+inicialização e configuração avançada em diretórios temporários sob
+`.test-tmp/`. Não há acesso a um gateway real nem escrita no `~/.pi/agent`
+verdadeiro durante os testes.
 
 Para testar a entrada local manualmente, sem instalar globalmente:
 

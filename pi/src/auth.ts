@@ -1,6 +1,7 @@
 import type { ApiKeyAuth, Credential } from "@earendil-works/pi-ai/compat";
 import type { ExpConfigStore } from "./config.ts";
 import { PROVIDER_ID } from "./constants.ts";
+import { resolveExpBaseUrl } from "./endpoint.ts";
 
 export function createExpAuth(configStore: ExpConfigStore): ApiKeyAuth {
   return {
@@ -29,7 +30,7 @@ export function createExpAuth(configStore: ExpConfigStore): ApiKeyAuth {
       return {
         auth: {
           apiKey: credential.key,
-          ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
+          baseUrl: resolveExpBaseUrl(config),
         },
         source: "Pi stored credential",
       };

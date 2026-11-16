@@ -2,6 +2,8 @@ export const PROVIDER_ID = "exp"
 export const INTEGRATION_ID = "exp"
 export const PROVIDER_NAME = "LiteLLM experimental"
 export const PROVIDER_PACKAGE = "@opencode/ai/providers/openai-compatible"
+export const DEFAULT_ENDPOINT = "http://pgeodsv1.ep.petrobras.com.br:4001/v1"
+export const ENDPOINT_ENV_VAR = "EXPLLM_HOST"
 
 export const DEFAULT_FALLBACK_CONTEXT_TOKENS = 128_000
 export const DEFAULT_FALLBACK_OUTPUT_TOKENS = 16_384

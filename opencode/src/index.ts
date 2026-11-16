@@ -8,6 +8,7 @@ export default Plugin.define({
   async setup(ctx) {
     const service = new ExpService({
       storage: ctx.storage,
+      environment: process.env,
       activeConnection: (integrationID) => ctx.integration.connection.active(integrationID),
       resolveCredential: (connection) => ctx.integration.connection.resolve(connection),
       publish: () => ctx.provider.reload(),

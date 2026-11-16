@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { STORAGE_CATALOG_KEY, STORAGE_ENDPOINT_KEY } from "../src/config.ts"
+import { DEFAULT_ENDPOINT, STORAGE_CATALOG_KEY, STORAGE_ENDPOINT_KEY } from "../src/config.ts"
 import { SafeError } from "../src/errors.ts"
 import type { DiscoverInput } from "../src/gateway.ts"
 import { ExpService, type ExpServiceDependencies, type ServerStorage } from "../src/service.ts"
@@ -34,7 +34,11 @@ function deferred<Value>() {
   return { promise, resolve, reject }
 }
 
-async function harness(discover?: (input: DiscoverInput) => Promise<DiscoveryResult>) {
+async function harness(
+  discover?: (input: DiscoverInput) => Promise<DiscoveryResult>,
+  storedEndpoint: string | null = "https://one.test/v1",
+  environment: Readonly<Record<string, string | undefined>> = {},
+) {
   const values = new Map<string, unknown>()
   const storage: Pick<ServerStorage, "get" | "set"> = {
     get: async (key) => values.get(key) as Awaited<ReturnType<ServerStorage["get"]>>,
@@ -42,12 +46,13 @@ async function harness(discover?: (input: DiscoverInput) => Promise<DiscoveryRes
       values.set(key, structuredClone(value))
     },
   }
-  await storage.set(STORAGE_ENDPOINT_KEY, "https://one.test/v1")
+  if (storedEndpoint !== null) await storage.set(STORAGE_ENDPOINT_KEY, storedEndpoint)
   let activeConnection: GatewayConnection | undefined = connection
   let activeCredential: GatewayCredential | undefined = credential
   let publications = 0
   const dependencies: ExpServiceDependencies = {
     storage,
+    environment,
     activeConnection: async () => activeConnection,
     resolveCredential: async () => activeCredential,
     publish: async () => {
@@ -70,6 +75,65 @@ async function harness(discover?: (input: DiscoverInput) => Promise<DiscoveryRes
     },
   }
 }
+
+test("instalação limpa usa o endpoint padrão sem persistir configuração", async () => {
+  const { service, values } = await harness(async (request) => {
+    assert.equal(request.endpoint, DEFAULT_ENDPOINT)
+    return discovery("default-model")
+  }, null)
+
+  const status = await service.refresh()
+  assert.equal(status.configured, true)
+  assert.equal(status.endpoint, DEFAULT_ENDPOINT)
+  assert.equal(service.providerSnapshot()?.info.settings?.baseURL, DEFAULT_ENDPOINT)
+  assert.deepEqual(service.providerSnapshot()?.models.map((item) => item.id), ["default-model"])
+  assert.equal(values.has(STORAGE_ENDPOINT_KEY), false)
+})
+
+test("EXPLLM_HOST normalizada tem precedência sobre endpoint persistido", async () => {
+  const { service, values } = await harness(async (request) => {
+    assert.equal(request.endpoint, "https://ambiente.test/proxy/v1")
+    return discovery("environment-model")
+  }, "https://persistido.test/v1", { EXPLLM_HOST: "https://ambiente.test/proxy/" })
+
+  const status = await service.refresh()
+  assert.equal(status.endpoint, "https://ambiente.test/proxy/v1")
+  assert.equal(values.get(STORAGE_ENDPOINT_KEY), "https://persistido.test/v1")
+  assert.equal(service.providerSnapshot()?.info.settings?.baseURL, "https://ambiente.test/proxy/v1")
+
+  const configured = await service.configure("https://outro.test")
+  assert.equal(configured.endpoint, "https://ambiente.test/proxy/v1")
+  assert.match(configured.lastError ?? "", /EXPLLM_HOST/)
+  assert.equal(values.get(STORAGE_ENDPOINT_KEY), "https://persistido.test/v1")
+})
+
+test("EXPLLM_HOST inválida não usa fallback silencioso nem consulta gateway", async () => {
+  let calls = 0
+  const { service } = await harness(async () => {
+    calls++
+    return discovery("never")
+  }, "https://persistido.test/v1", { EXPLLM_HOST: "endpoint-sem-esquema" })
+
+  const status = await service.refresh()
+  assert.equal(calls, 0)
+  assert.equal(status.configured, false)
+  assert.equal(status.endpoint, null)
+  assert.equal(status.lastRefresh, "error")
+  assert.equal(service.providerSnapshot(), undefined)
+})
+
+test("EXPLLM_KEY não é consultada durante configuração e descoberta", async () => {
+  const environment = {
+    get EXPLLM_KEY(): string {
+      throw new Error("EXPLLM_KEY não deve ser lida pelo plugin")
+    },
+  }
+  const { service } = await harness(async () => discovery("default-model"), null, environment)
+
+  const status = await service.refresh()
+  assert.equal(status.endpoint, DEFAULT_ENDPOINT)
+  assert.equal(status.modelCount, 1)
+})
 
 test("catálogo válido é publicado como exp/<id> sem credencial no provider", async () => {
   const { service, values } = await harness(async () => discovery("alpha", "beta"))

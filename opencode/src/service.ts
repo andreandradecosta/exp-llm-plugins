@@ -1,6 +1,8 @@
 import { Integration, Model, Plugin, Provider } from "@opencode/plugin"
 import { parseStoredCatalog } from "./catalog.ts"
 import {
+  DEFAULT_ENDPOINT,
+  ENDPOINT_ENV_VAR,
   INTEGRATION_ID,
   PROVIDER_ID,
   PROVIDER_NAME,
@@ -27,6 +29,7 @@ export type ServerStorage = Plugin.Context["storage"]
 
 export interface ExpServiceDependencies {
   readonly storage: Pick<ServerStorage, "get" | "set">
+  readonly environment?: Readonly<Record<string, string | undefined>>
   readonly activeConnection: (integrationID: string) => Promise<GatewayConnection | undefined>
   readonly resolveCredential: (connection: GatewayConnection) => Promise<GatewayCredential | undefined>
   readonly publish: () => Promise<void>
@@ -75,15 +78,25 @@ export class ExpService {
         this.dependencies.storage.get(STORAGE_ENDPOINT_KEY),
         this.dependencies.storage.get(STORAGE_CATALOG_KEY),
       ])
-      if (typeof endpoint === "string") {
-        try {
+      this.catalog = parseStoredCatalog(cached)
+      try {
+        const override = this.environmentEndpoint()
+        if (override) {
+          this.endpointValue = override
+        } else if (typeof endpoint === "string") {
           this.endpointValue = normalizeEndpoint(endpoint)
-        } catch {
+        } else {
+          this.endpointValue = normalizeEndpoint(DEFAULT_ENDPOINT)
+        }
+      } catch (error) {
+        this.endpointValue = undefined
+        if (this.environmentEndpointValue()) {
+          this.rememberError(error)
+        } else {
           this.lastErrorValue = "O endpoint persistido é inválido. Execute /exp-setup para configurá-lo novamente."
           this.lastRefreshValue = "error"
         }
       }
-      this.catalog = parseStoredCatalog(cached)
     } catch {
       this.lastErrorValue = "Não foi possível ler a configuração persistida do plugin."
       this.lastRefreshValue = "error"
@@ -149,6 +162,11 @@ export class ExpService {
     let normalized: string
     try {
       normalized = normalizeEndpoint(endpoint)
+      if (this.environmentEndpointValue()) {
+        this.lastRefreshValue = "error"
+        this.lastErrorValue = `${ENDPOINT_ENV_VAR} está definida e tem precedência. Remova essa variável para configurar outro endpoint por /exp-setup.`
+        return this.status()
+      }
     } catch (error) {
       this.rememberError(error)
       return this.status()
@@ -328,6 +346,16 @@ export class ExpService {
 
   private isCurrent(revision: number): boolean {
     return !this.disposed && revision === this.revision
+  }
+
+  private environmentEndpointValue(): string | undefined {
+    const value = this.dependencies.environment?.[ENDPOINT_ENV_VAR]?.trim()
+    return value || undefined
+  }
+
+  private environmentEndpoint(): string | undefined {
+    const value = this.environmentEndpointValue()
+    return value ? normalizeEndpoint(value) : undefined
   }
 
   private rememberError(error: unknown): void {

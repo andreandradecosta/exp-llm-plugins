@@ -16,7 +16,7 @@ export default Plugin.define({
       try {
         const status = asExpStatus(await context.client.rpc(ExpRpc).refresh({}))
         invalidate()
-        if (automatic && status.configured && status.lastError) {
+        if (automatic && status.lastError) {
           context.ui.toast.show({
             title: "LiteLLM (exp)",
             message: status.lastError,
@@ -46,7 +46,6 @@ export default Plugin.define({
           group: "LiteLLM",
           palette: true,
           slash: { name: "exp-setup" },
-          suggested: true,
           run: async () => {
             try {
               const current = asExpStatus(await context.client.rpc(ExpRpc).status({}))

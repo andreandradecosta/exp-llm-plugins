@@ -29,29 +29,47 @@ editar configuração do `llm` para habilitá-lo.
 
 ## Configuração interativa
 
+O endpoint padrão é `http://pgeodsv1.ep.petrobras.com.br:4001`, normalizado
+internamente para `http://pgeodsv1.ep.petrobras.com.br:4001/v1`. Na ausência
+de um endpoint persistido ou de um override de ambiente, a descoberta usa esse
+endereço; não é necessário criar um arquivo de configuração para o endpoint.
+
 Execute:
 
 ```bash
 llm exp configure
 ```
 
-O comando solicita o endpoint e, em seguida, o token com entrada oculta. O
-endpoint é normalizado para terminar em `/v1`, tanto se for informado com ou
-sem esse sufixo e com ou sem barra final. O token é salvo com o nome `exp` pelo
-mesmo mecanismo usado por `llm keys set exp`; ele não é argumento de shell e,
-portanto, não entra no histórico de comandos nem é exibido pelo plugin.
+O comando solicita **somente o token**, com entrada oculta. O token é salvo com
+o nome `exp` pelo mesmo mecanismo usado por `llm keys set exp`; ele não é
+argumento de shell e, portanto, não entra no histórico de comandos nem é
+exibido pelo plugin. O comando também registra somente metadados públicos do
+endpoint efetivo (já normalizado para `/v1`), sem armazenar o token nesse
+arquivo.
+
+A resolução do endpoint segue esta ordem:
+
+1. `EXPLLM_HOST` não vazia;
+2. endpoint previamente persistido em `exp-gateway.json`;
+3. endpoint padrão.
+
+`EXPLLM_HOST` tem precedência em runtime, inclusive durante a execução de
+`llm exp configure`, e aceita o endereço com ou sem `/v1` e com ou sem barra
+final. Um valor não vazio inválido produz um erro seguro, sem expor o conteúdo
+da variável e sem recuar silenciosamente para o arquivo ou para o padrão.
 
 Também é possível usar as variáveis de ambiente:
 
 - `EXP_API_KEY`: token, como alternativa ao armazenamento nativo de chaves;
-- `EXP_LITELLM_HOST`: endpoint opcional, com precedência sobre o arquivo;
+- `EXPLLM_HOST`: override opcional do endpoint, com a precedência descrita
+  acima;
 - `EXP_DISCOVERY_TIMEOUT`: timeout em segundos de cada consulta HTTP (padrão
   `3.0`; valores inválidos ou não positivos voltam ao padrão).
 
 A configuração e o catálogo ficam no diretório global retornado por
 `llm.user_dir()`:
 
-- `exp-gateway.json`: somente versão e endpoint normalizado;
+- `exp-gateway.json`: somente versão e endpoint efetivo normalizado;
 - `exp-gateway-models.json`: último catálogo válido, sem token ou cabeçalhos;
 - `keys.json`: credencial administrada exclusivamente pelo mecanismo nativo
   do `llm`, não pelo arquivo de configuração deste plugin.
@@ -109,12 +127,14 @@ modelo. Respostas continuam sendo processadas pelas implementações nativas do
 `llm`, inclusive os metadados que elas já preservam.
 
 O catálogo válido substitui integralmente o cache por escrita temporária e
-rename atômico, evitando IDs obsoletos ou duplicados. Se a renovação falhar, o
-último catálogo válido do mesmo endpoint é usado temporariamente e uma
-mensagem clara é emitida no stderr. Na primeira falha, sem cache, o plugin não
-interrompe os demais comandos do `llm`. Sem endpoint, a descoberta não é
-executada; sem token, nenhuma requisição é feita e só pode haver fallback ao
-cache público já existente.
+rename atômico, evitando IDs obsoletos ou duplicados. O isolamento por endpoint
+impede reutilizar o catálogo de outro gateway. Se a renovação falhar, o último
+catálogo válido do mesmo endpoint é usado temporariamente e uma mensagem clara
+é emitida no stderr. Na primeira falha, sem cache, o plugin não interrompe os
+demais comandos do `llm`. Mesmo sem arquivo de configuração, a descoberta tenta
+o endpoint padrão quando encontra o token no mecanismo nativo de chaves (ou em
+`EXP_API_KEY`). Sem token, nenhuma requisição é feita e só pode haver fallback
+ao cache público já existente.
 
 ## Desenvolvimento e testes
 
@@ -123,8 +143,12 @@ A partir da raiz deste repositório, usando o virtualenv `.venv` da raiz:
 ```bash
 uv venv .venv
 uv pip install --python .venv/bin/python -e './datasette-llm[dev]'
-.venv/bin/python -m pytest datasette-llm/tests
+.venv/bin/python -m pytest datasette-llm/tests -p no:cacheprovider
 ```
+
+O plugin não carrega arquivos `.env` nem consulta `EXPLLM_KEY` em runtime. Essa
+variável é reservada exclusivamente para validação manual de desenvolvimento;
+não é uma alternativa ao mecanismo nativo de chaves ou a `EXP_API_KEY`.
 
 Os testes usam `httpx.MockTransport`, mocks e diretórios temporários isolados
 para `llm.user_dir()`/`LLM_USER_PATH`. Eles não acessam o gateway real, não

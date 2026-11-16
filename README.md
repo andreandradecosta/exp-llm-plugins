@@ -4,9 +4,9 @@ Plugins para que `OpenCode`, `pi.dev` e o CLI `llm` (Datasette) acessem os LLMs
 internos expostos pelo gateway LiteLLM da EXP.
 
 Cada harness possui um pacote independente, instalado e configurado por usuário.
-O objetivo é que, após informar o endpoint e o token uma única vez, o usuário
-encontre os modelos internos no seletor nativo do harness e tenha o catálogo
-atualizado sempre que o harness for aberto.
+O objetivo é que, após informar somente o token uma única vez, o usuário encontre
+os modelos internos no seletor nativo do harness e tenha o catálogo atualizado
+sempre que o harness for aberto.
 
 ## Pacotes
 
@@ -20,8 +20,9 @@ atualizado sempre que o harness for aberto.
 
 Os três plugins seguem o mesmo contrato:
 
-1. O usuário configura o endpoint do gateway e informa seu token em um fluxo
-   interativo apropriado para o harness.
+1. O plugin já usa o endpoint padrão do gateway; o usuário informa somente seu
+   token em um fluxo interativo apropriado para o harness. Para testar outro
+   endpoint, define `EXPLLM_HOST` antes de iniciar o harness.
 2. O plugin consulta `/v1/models` para obter os modelos disponíveis e, quando
    possível, usa `/v1/model/info` apenas para complementar seus metadados.
 3. Os modelos são registrados no seletor nativo do harness com o provider `exp`.
@@ -41,15 +42,20 @@ fornece.
 
 ## Gateway
 
-O endpoint informado pode conter ou não o sufixo `/v1`. A autenticação usa
-`Authorization: Bearer <token>`, e a inferência utiliza a API OpenAI Chat
-Completions.
-
-Exemplo de endpoint:
+O endpoint padrão é:
 
 ```text
 http://pgeodsv1.ep.petrobras.com.br:4001
 ```
+
+Ele pode conter ou não o sufixo `/v1`, que é normalizado internamente. A
+precedência de configuração é `EXPLLM_HOST`, endpoint persistido por uma
+instalação anterior e, por fim, o padrão. Um valor inválido na variável é
+reportado sem usar outro endpoint silenciosamente.
+
+A autenticação usa `Authorization: Bearer <token>`, e a inferência utiliza a API
+OpenAI Chat Completions. Nenhum plugin carrega o `.env` automaticamente nem lê
+`EXPLLM_KEY` em runtime.
 
 ## Desenvolvimento
 
@@ -58,8 +64,8 @@ verificação de tipos. Para testes manuais com o gateway, o repositório aceita
 arquivo `.env` local, não versionado, com:
 
 ```dotenv
-LITELLM_HOST=http://pgeodsv1.ep.petrobras.com.br:4001
-LITELLM_KEY=seu-token
+EXPLLM_HOST=http://pgeodsv1.ep.petrobras.com.br:4001
+EXPLLM_KEY=seu-token
 ```
 
 Nenhum teste automatizado de unidade utiliza essas credenciais ou depende do

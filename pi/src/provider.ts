@@ -11,7 +11,8 @@ import {
 import { apiKeyFromCredential, createExpAuth } from "./auth.ts";
 import { FileExpCatalogStore, FileExpConfigStore, type ExpConfig, type ExpConfigStore } from "./config.ts";
 import { PROVIDER_ID, PROVIDER_NAME } from "./constants.ts";
-import { ExpConfigError, ExpDiscoveryError } from "./errors.ts";
+import { resolveExpBaseUrl } from "./endpoint.ts";
+import { ExpDiscoveryError } from "./errors.ts";
 import { GatewayDiscoveryClient, type DiscoveryClient } from "./discovery.ts";
 
 export type ExpProvider = Provider<"openai-completions">;
@@ -43,6 +44,7 @@ export function createExpIntegration(options: ExpIntegrationOptions): ExpIntegra
   const auth = createExpAuth(options.configStore);
   let models: readonly Model<"openai-completions">[] = [];
   let hasUsableCatalog = false;
+  let catalogBaseUrl: string | undefined;
   let generation = 0;
 
   // Streaming and auth stay in Pi's native provider implementation. Only the
@@ -60,17 +62,21 @@ export function createExpIntegration(options: ExpIntegrationOptions): ExpIntegra
     getModels: () => models,
     getAllModels: () => models,
     refreshModels: async (context) => {
-      if (!hasUsableCatalog && context.stored) {
-        const restored = context.stored.models.filter(
+      const config = await options.configStore.read();
+      const baseUrl = resolveExpBaseUrl(config);
+      if (!hasUsableCatalog || catalogBaseUrl !== baseUrl) {
+        const restored = context.stored?.models.filter(
           (model): model is Model<"openai-completions"> =>
             model.provider === PROVIDER_ID &&
             (model.type === undefined || model.type === "chat") &&
-            model.api === "openai-completions",
-        );
+            model.api === "openai-completions" &&
+            model.baseUrl === baseUrl,
+        ) ?? [];
         const published = await context.publish({
           update: () => {
             models = restored;
-            hasUsableCatalog = true;
+            hasUsableCatalog = context.stored !== undefined;
+            catalogBaseUrl = baseUrl;
           },
         });
         if (!published) return;
@@ -80,17 +86,13 @@ export function createExpIntegration(options: ExpIntegrationOptions): ExpIntegra
       // Cache-only synchronization (including native /login) must not cancel a
       // watcher-initiated network refresh without providing a newer catalog.
       const currentGeneration = ++generation;
-      const config = await options.configStore.read();
-      if (!config.baseUrl) {
-        throw new ExpConfigError("EXP endpoint is not configured; run /exp-configure");
-      }
       const token = apiKeyFromCredential(context.credential);
       if (!token) {
         throw new ExpDiscoveryError("EXP token is not configured; use /login with the EXP provider", 401);
       }
 
       const fetched = await discoveryClient.discover({
-        baseUrl: config.baseUrl,
+        baseUrl,
         token,
         defaultMaxTokens: config.defaultMaxTokens,
         timeoutMs: config.timeoutMs,
@@ -106,6 +108,7 @@ export function createExpIntegration(options: ExpIntegrationOptions): ExpIntegra
           if (context.signal.aborted || generation !== currentGeneration) return;
           models = fetched;
           hasUsableCatalog = true;
+          catalogBaseUrl = baseUrl;
         },
       });
     },
@@ -133,10 +136,11 @@ export function createExpIntegration(options: ExpIntegrationOptions): ExpIntegra
       let config: ExpConfig | undefined;
       try {
         config = await options.configStore.read();
+        resolveExpBaseUrl(config);
       } catch (error) {
         setupError = asError(error);
       }
-      const attempted = !setupError && Boolean(config?.baseUrl && apiKeyFromCredential(credential)) && !signal.aborted;
+      const attempted = !setupError && Boolean(apiKeyFromCredential(credential)) && !signal.aborted;
       const publications = createStartupPublisher(options.catalogStore, signal);
 
       try {

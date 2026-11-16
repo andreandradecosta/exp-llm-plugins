@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   InMemoryCredentialStore,
   InMemoryModelsStore,
@@ -8,6 +8,16 @@ import { createExpAuth } from "../src/auth.ts";
 import { InMemoryExpConfigStore } from "../src/config.ts";
 import { createExpIntegration } from "../src/provider.ts";
 import { cachedModel } from "./fixtures.ts";
+import { DEFAULT_EXP_BASE_URL } from "../src/constants.ts";
+
+beforeEach(() => {
+  vi.stubEnv("EXPLLM_HOST", "");
+  vi.stubEnv("EXPLLM_KEY", "");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("native EXP API key authentication", () => {
   it("uses a secret prompt and stores only through Pi's native login", async () => {
@@ -26,7 +36,8 @@ describe("native EXP API key authentication", () => {
     expect(JSON.stringify(await configStore.read())).not.toContain("fixture-token");
   });
 
-  it("rejects an empty token and never reads ambient gateway environment variables", async () => {
+  it("rejects an empty token and never reads EXPLLM_KEY as a credential", async () => {
+    vi.stubEnv("EXPLLM_KEY", "ambient-token-must-not-be-used");
     const auth = createExpAuth(new InMemoryExpConfigStore());
     await expect(auth.login?.({
       prompt: async () => "   ",
@@ -52,6 +63,37 @@ describe("native EXP API key authentication", () => {
       auth: { apiKey: "fixture-token", baseUrl: "https://gateway.test/v1" },
       source: "Pi stored credential",
     });
+  });
+
+  it("uses the default endpoint during inference without a saved endpoint", async () => {
+    const auth = createExpAuth(new InMemoryExpConfigStore());
+    const resolved = await auth.resolve({
+      ctx: { env: async () => undefined, fileExists: async () => false },
+      credential: { type: "api_key", key: "fixture-token" },
+      signal: new AbortController().signal,
+    });
+    expect(resolved?.auth).toEqual({ apiKey: "fixture-token", baseUrl: DEFAULT_EXP_BASE_URL });
+  });
+
+  it("uses EXPLLM_HOST during inference instead of the persisted endpoint", async () => {
+    vi.stubEnv("EXPLLM_HOST", "http://environment.test:4001");
+    const auth = createExpAuth(new InMemoryExpConfigStore({ baseUrl: "https://persisted.test" }));
+    const resolved = await auth.resolve({
+      ctx: { env: async () => undefined, fileExists: async () => false },
+      credential: { type: "api_key", key: "fixture-token" },
+      signal: new AbortController().signal,
+    });
+    expect(resolved?.auth.baseUrl).toBe("http://environment.test:4001/v1");
+  });
+
+  it("rejects an invalid EXPLLM_HOST during inference without persisted fallback", async () => {
+    vi.stubEnv("EXPLLM_HOST", "invalid-endpoint");
+    const auth = createExpAuth(new InMemoryExpConfigStore({ baseUrl: "https://persisted.test" }));
+    await expect(auth.resolve({
+      ctx: { env: async () => undefined, fileExists: async () => false },
+      credential: { type: "api_key", key: "fixture-token" },
+      signal: new AbortController().signal,
+    })).rejects.toThrow(/Invalid EXPLLM_HOST/);
   });
 
   it("integrates login, availability and native model refresh with injected storage", async () => {

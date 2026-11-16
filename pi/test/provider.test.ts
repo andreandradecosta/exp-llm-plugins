@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   InMemoryCredentialStore,
   InMemoryModelsStore,
@@ -8,6 +8,16 @@ import type { DiscoveryClient, DiscoveryOptions } from "../src/discovery.ts";
 import { InMemoryExpConfigStore } from "../src/config.ts";
 import { createExpIntegration } from "../src/provider.ts";
 import { cachedModel } from "./fixtures.ts";
+import { DEFAULT_EXP_BASE_URL } from "../src/constants.ts";
+
+beforeEach(() => {
+  vi.stubEnv("EXPLLM_HOST", "");
+  vi.stubEnv("EXPLLM_KEY", "");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 async function authenticatedRuntime(
   discoveryClient: DiscoveryClient,
@@ -27,6 +37,90 @@ async function authenticatedRuntime(
 }
 
 describe("EXP dynamic provider contract", () => {
+  it("discovers with the default endpoint and preserved defaults on a clean installation", async () => {
+    const discover = vi.fn(async (options: DiscoveryOptions) => [
+      cachedModel("default-endpoint-model", options.baseUrl),
+    ]);
+    const integration = createExpIntegration({
+      configStore: new InMemoryExpConfigStore(),
+      catalogStore: new InMemoryModelsStore(),
+      readCredential: () => ({ type: "api_key", key: "clean-install-token" }),
+      discoveryClient: { discover },
+    });
+
+    expect(await integration.refresh()).toEqual({ attempted: true });
+    expect(discover).toHaveBeenCalledWith(expect.objectContaining({
+      baseUrl: DEFAULT_EXP_BASE_URL,
+      defaultMaxTokens: 16_384,
+      timeoutMs: 5_000,
+    }));
+    expect(integration.provider.getModels()[0]?.baseUrl).toBe(DEFAULT_EXP_BASE_URL);
+  });
+
+  it("gives EXPLLM_HOST precedence over the persisted endpoint during discovery", async () => {
+    vi.stubEnv("EXPLLM_HOST", "http://environment.test:4001/proxy");
+    const discover = vi.fn(async (options: DiscoveryOptions) => [
+      cachedModel("environment-endpoint-model", options.baseUrl),
+    ]);
+    const integration = createExpIntegration({
+      configStore: new InMemoryExpConfigStore({ baseUrl: "https://persisted.test" }),
+      catalogStore: new InMemoryModelsStore(),
+      readCredential: () => ({ type: "api_key", key: "precedence-token" }),
+      discoveryClient: { discover },
+    });
+
+    await integration.refresh();
+    expect(discover).toHaveBeenCalledWith(expect.objectContaining({
+      baseUrl: "http://environment.test:4001/proxy/v1",
+    }));
+    expect(integration.provider.getModels()[0]?.baseUrl).toBe("http://environment.test:4001/proxy/v1");
+  });
+
+  it("reports invalid EXPLLM_HOST without discovering or restoring a persisted-endpoint cache", async () => {
+    vi.stubEnv("EXPLLM_HOST", "invalid-endpoint");
+    const modelsStore = new InMemoryModelsStore();
+    await modelsStore.write("exp", {
+      models: [cachedModel("persisted-cache", "https://persisted.test/v1")],
+      checkedAt: 1,
+    });
+    const discover = vi.fn(async () => [cachedModel()]);
+    const integration = createExpIntegration({
+      configStore: new InMemoryExpConfigStore({ baseUrl: "https://persisted.test" }),
+      catalogStore: modelsStore,
+      readCredential: () => ({ type: "api_key", key: "invalid-env-token" }),
+      discoveryClient: { discover },
+    });
+
+    const result = await integration.refresh();
+    expect(result.attempted).toBe(false);
+    expect(result.error?.message).toMatch(/Invalid EXPLLM_HOST/);
+    expect(discover).not.toHaveBeenCalled();
+    expect(integration.provider.getModels()).toEqual([]);
+  });
+
+  it("drops live and cached models from the old endpoint after an EXPLLM_HOST switch", async () => {
+    const discover = vi.fn(async (options: DiscoveryOptions) => {
+      if (options.baseUrl === "https://persisted.test/v1") {
+        return [cachedModel("old-live-model", options.baseUrl)];
+      }
+      throw new Error("new endpoint unavailable");
+    });
+    const integration = createExpIntegration({
+      configStore: new InMemoryExpConfigStore({ baseUrl: "https://persisted.test" }),
+      catalogStore: new InMemoryModelsStore(),
+      readCredential: () => ({ type: "api_key", key: "switch-endpoint-token" }),
+      discoveryClient: { discover },
+    });
+    await integration.refresh();
+    expect(integration.provider.getModels().map((model) => model.id)).toEqual(["old-live-model"]);
+
+    vi.stubEnv("EXPLLM_HOST", "https://environment.test");
+    const result = await integration.refresh();
+    expect(result.error?.message).toBe("new endpoint unavailable");
+    expect(discover).toHaveBeenLastCalledWith(expect.objectContaining({ baseUrl: "https://environment.test/v1" }));
+    expect(integration.provider.getModels()).toEqual([]);
+  });
+
   it("restores the last valid native cache on failure and emits a clear error", async () => {
     const modelsStore = new InMemoryModelsStore();
     await modelsStore.write("exp", { models: [cachedModel("cached-model")], checkedAt: 1 });
@@ -57,7 +151,7 @@ describe("EXP dynamic provider contract", () => {
     expect(JSON.stringify(await modelsStore.read("exp"))).not.toContain("provider-fixture-token");
   });
 
-  it("fails clearly when the endpoint or first discovery is missing", async () => {
+  it("fails clearly when the first discovery fails without a cache", async () => {
     const { runtime } = await authenticatedRuntime({
       discover: async () => { throw new Error("first discovery failed"); },
     });
@@ -158,10 +252,11 @@ describe("EXP dynamic provider contract", () => {
     expect(integration.provider.getModels().map((model) => model.id)).toEqual(["discovered-after-login"]);
   });
 
-  it("does not call the network at startup without both endpoint and native token", async () => {
+  it("does not call the network with EXPLLM_KEY but without a native token", async () => {
+    vi.stubEnv("EXPLLM_KEY", "environment-token-must-not-be-used");
     const discover = vi.fn(async () => [cachedModel()]);
     const integration = createExpIntegration({
-      configStore: new InMemoryExpConfigStore({ baseUrl: "https://gateway.test" }),
+      configStore: new InMemoryExpConfigStore(),
       catalogStore: new InMemoryModelsStore(),
       readCredential: () => undefined,
       discoveryClient: { discover },

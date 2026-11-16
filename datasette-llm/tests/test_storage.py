@@ -67,14 +67,39 @@ def test_cache_nao_contem_campos_extras_nem_credenciais() -> None:
     }
 
 
-def test_endpoint_de_ambiente_e_opcional_e_tem_precedencia(
+def test_sem_arquivo_usa_endpoint_padrao_normalizado() -> None:
+    assert not storage.config_path().exists()
+    assert storage.configured_endpoint() == (
+        "http://pgeodsv1.ep.petrobras.com.br:4001/v1"
+    )
+
+
+def test_endpoint_persistido_tem_precedencia_sobre_o_padrao() -> None:
+    storage.save_endpoint("https://arquivo.example.com/v1")
+    assert storage.configured_endpoint() == "https://arquivo.example.com/v1"
+
+
+def test_endpoint_de_ambiente_nao_vazio_tem_precedencia(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     storage.save_endpoint("https://arquivo.example.com/v1")
-    assert storage.configured_endpoint() == "https://arquivo.example.com/v1"
-    monkeypatch.setenv("EXP_LITELLM_HOST", "https://ambiente.example.com")
+    monkeypatch.setenv("EXPLLM_HOST", "https://ambiente.example.com")
     assert storage.configured_endpoint() == "https://ambiente.example.com/v1"
 
+    monkeypatch.setenv("EXPLLM_HOST", "   ")
+    assert storage.configured_endpoint() == "https://arquivo.example.com/v1"
 
-def test_sem_configuracao_retorna_none() -> None:
-    assert storage.configured_endpoint() is None
+
+def test_ambiente_invalido_erro_seguro_sem_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage.save_endpoint("https://arquivo.example.com/v1")
+    monkeypatch.setenv(
+        "EXPLLM_HOST", "https://ambiente.example.com/?segredo=nao-expor"
+    )
+    with pytest.raises(storage.ConfigurationError) as caught:
+        storage.configured_endpoint()
+    message = str(caught.value)
+    assert "EXPLLM_HOST" in message
+    assert "segredo" not in message
+    assert "nao-expor" not in message

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { InMemoryModelsStore, type Credential } from "@earendil-works/pi-ai/compat";
 import { createExpExtension } from "../src/extension.ts";
@@ -40,8 +40,14 @@ function fakePi() {
   };
 }
 
+beforeEach(() => {
+  vi.stubEnv("EXPLLM_HOST", "");
+  vi.stubEnv("EXPLLM_KEY", "");
+});
+
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 function commandContext(inputs: string[], hasUI = true) {
@@ -113,6 +119,21 @@ describe("extension initialization and /exp-configure", () => {
     expect(notifications.at(-1)?.message).toContain("automatically");
     expect(notifications.at(-1)?.message).not.toContain("/reload");
     expect(notifications.at(-1)?.message).not.toContain("fixture-token");
+  });
+
+  it("does not present a saved endpoint as replacing active EXPLLM_HOST", async () => {
+    vi.stubEnv("EXPLLM_HOST", "https://environment.test");
+    const fixture = await extensionFixture();
+    const { ctx, notifications } = commandContext(["https://saved-for-later.test", "8192"]);
+    await fixture.commands.get("exp-configure")?.handler("", ctx);
+
+    expect(await fixture.configStore.read()).toMatchObject({
+      baseUrl: "https://saved-for-later.test/v1",
+      defaultMaxTokens: 8192,
+    });
+    expect(notifications.at(-1)?.message).toContain("EXPLLM_HOST remains active");
+    expect(notifications.at(-1)?.message).toContain("only when it is unset");
+    expect(notifications.at(-1)?.message).not.toContain("EXP configured");
   });
 
   it("refreshes after simulated login, token replacement and removal, then cleans up reload resources", async () => {

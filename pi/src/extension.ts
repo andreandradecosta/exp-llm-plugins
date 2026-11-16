@@ -3,7 +3,7 @@ import { getAgentDir, readStoredCredential } from "@earendil-works/pi-coding-age
 import { join } from "node:path";
 import type { Credential } from "@earendil-works/pi-ai/compat";
 import { LOGIN_INSTRUCTIONS, apiKeyFromCredential } from "./auth.ts";
-import { DEFAULT_MAX_OUTPUT_TOKENS, PROVIDER_ID } from "./constants.ts";
+import { DEFAULT_EXP_BASE_URL, DEFAULT_MAX_OUTPUT_TOKENS, PROVIDER_ID } from "./constants.ts";
 import { normalizeBaseUrl } from "./endpoint.ts";
 import { errorMessage } from "./errors.ts";
 import { positiveInteger } from "./config.ts";
@@ -65,7 +65,7 @@ export function createExpExtension(
 
 function registerConfigureCommand(pi: ExtensionAPI, integration: ExpIntegration): void {
   pi.registerCommand("exp-configure", {
-    description: "Configure the global EXP endpoint, then use native /login for the token",
+    description: "Advanced EXP settings; EXPLLM_HOST takes precedence over the saved endpoint",
     handler: async (_args, ctx) => {
       if (!ctx.hasUI) {
         ctx.ui.notify("Use /exp-configure in interactive Pi; do not put tokens in commands or files.", "warning");
@@ -73,9 +73,10 @@ function registerConfigureCommand(pi: ExtensionAPI, integration: ExpIntegration)
       }
 
       const current = await integration.configStore.read();
+      const environmentOverridesEndpoint = Boolean(process.env.EXPLLM_HOST?.trim());
       const endpointInput = await ctx.ui.input(
-        "EXP gateway base URL (with or without /v1)",
-        current.baseUrl ?? "https://gateway.example.com/v1",
+        "Saved EXP gateway base URL, used when EXPLLM_HOST is unset (with or without /v1)",
+        current.baseUrl ?? DEFAULT_EXP_BASE_URL,
       );
       if (endpointInput === undefined) return;
 
@@ -109,17 +110,25 @@ function registerConfigureCommand(pi: ExtensionAPI, integration: ExpIntegration)
 
       const refreshed = await integration.refresh(ctx.signal);
       pi.registerProvider(integration.provider);
+      const endpointNotice = environmentOverridesEndpoint
+        ? "EXPLLM_HOST remains active; the saved endpoint applies only when it is unset."
+        : "Endpoint saved.";
       if (refreshed.error) {
-        ctx.ui.notify(`Endpoint saved; catalog refresh failed: ${errorMessage(refreshed.error)}`, "warning");
+        ctx.ui.notify(`${endpointNotice} Catalog refresh failed: ${errorMessage(refreshed.error)}`, "warning");
       } else if (refreshed.attempted) {
-        ctx.ui.notify(`EXP configured: ${integration.provider.getModels().length} models available`, "info");
+        ctx.ui.notify(
+          environmentOverridesEndpoint
+            ? `${endpointNotice} ${integration.provider.getModels().length} models available from the active endpoint.`
+            : `EXP configured: ${integration.provider.getModels().length} models available`,
+          "info",
+        );
         return;
       }
 
       // Native /login stores the token securely. The interactive session's
       // auth watcher discovers newly saved, replaced or removed credentials.
       ctx.ui.notify(
-        `Endpoint saved. ${LOGIN_INSTRUCTIONS} The catalog refreshes automatically after login.`,
+        `${endpointNotice} ${LOGIN_INSTRUCTIONS} The catalog refreshes automatically after login.`,
         "info",
       );
     },
