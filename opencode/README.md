@@ -1,7 +1,7 @@
-# opencode-exp-litellm
+# opencode-exp-gateway
 
-Plugin **OpenCode V2** para descobrir e usar modelos de um gateway LiteLLM
-OpenAI-compatible. O provider é registrado como `exp`; os modelos aparecem como
+Plugin **OpenCode V2** para descobrir e usar modelos de um gateway compatível
+com a API OpenAI. O provider é registrado como `exp`; os modelos aparecem como
 `exp/<id>` no seletor `/models`.
 
 A implementação usa as APIs atuais de server, TUI e RPC de
@@ -15,7 +15,7 @@ Depois que este pacote npm estiver publicado, instale-o globalmente pela CLI do
 OpenCode:
 
 ```sh
-opencode plugin add opencode-exp-litellm@1.0.0
+opencode plugin add opencode-exp-gateway@1.0.0
 opencode plugin list
 ```
 
@@ -31,7 +31,7 @@ Para desenvolvimento local, execute `npm run build` e referencie o diretório em
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
     {
-      "package": "/caminho/absoluto/para/opencode-exp-litellm",
+      "package": "/caminho/absoluto/para/opencode-exp-gateway",
       "options": {
         "fallbackContextTokens": 128000,
         "fallbackOutputTokens": 16384,
@@ -73,7 +73,7 @@ Abra o OpenCode e execute somente o fluxo nativo de autenticação:
 /connect
 ```
 
-Selecione **LiteLLM experimental (exp)**, o método **Token do gateway LiteLLM**
+Selecione **Gateway experimental (exp)**, o método **Token do gateway**
 e informe o token no prompt nativo. O token não é aceito na configuração do
 plugin e não deve ser digitado no histórico de comandos, variáveis de ambiente
 ou prompts de sessão.

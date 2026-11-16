@@ -18,7 +18,7 @@ export default Plugin.define({
         invalidate()
         if (automatic && status.lastError) {
           context.ui.toast.show({
-            title: "LiteLLM (exp)",
+            title: "Gateway (exp)",
             message: status.lastError,
             variant: "warning",
           })
@@ -27,7 +27,7 @@ export default Plugin.define({
       } catch {
         if (!automatic) {
           context.ui.toast.show({
-            title: "LiteLLM (exp)",
+            title: "Gateway (exp)",
             message: "Não foi possível chamar o RPC do server. Verifique se o plugin está ativo.",
             variant: "error",
           })
@@ -42,15 +42,15 @@ export default Plugin.define({
       commands: [
         {
           id: "exp.setup",
-          title: "Configurar gateway LiteLLM",
-          group: "LiteLLM",
+          title: "Configurar gateway",
+          group: "Gateway",
           palette: true,
           slash: { name: "exp-setup" },
           run: async () => {
             try {
               const current = asExpStatus(await context.client.rpc(ExpRpc).status({}))
               const endpoint = await context.ui.dialog.prompt({
-                title: "Endpoint do gateway LiteLLM",
+                title: "Endpoint do gateway",
                 description: "Use uma URL http(s), com ou sem /v1. O token NÃO deve ser informado aqui.",
                 placeholder: "http://gateway:4001",
                 ...(current.endpoint ? { value: current.endpoint } : {}),
@@ -62,7 +62,7 @@ export default Plugin.define({
               showResult((options) => context.ui.toast.show(options), status, "Endpoint salvo e catálogo atualizado.")
             } catch {
               context.ui.toast.show({
-                title: "LiteLLM (exp)",
+                title: "Gateway (exp)",
                 message: "Não foi possível configurar o endpoint pelo RPC do server.",
                 variant: "error",
               })
@@ -71,8 +71,8 @@ export default Plugin.define({
         },
         {
           id: "exp.refresh",
-          title: "Atualizar modelos do gateway LiteLLM",
-          group: "LiteLLM",
+          title: "Atualizar modelos do gateway",
+          group: "Gateway",
           palette: true,
           slash: { name: "exp-refresh" },
           run: async () => {
@@ -82,20 +82,20 @@ export default Plugin.define({
         },
         {
           id: "exp.status",
-          title: "Status do gateway LiteLLM",
-          group: "LiteLLM",
+          title: "Status do gateway",
+          group: "Gateway",
           palette: true,
           slash: { name: "exp-status" },
           run: async () => {
             try {
               const status = asExpStatus(await context.client.rpc(ExpRpc).status({}))
               await context.ui.dialog.alert({
-                title: "LiteLLM (exp)",
+                title: "Gateway (exp)",
                 message: formatStatus(status),
               })
             } catch {
               context.ui.toast.show({
-                title: "LiteLLM (exp)",
+                title: "Gateway (exp)",
                 message: "Não foi possível consultar o status pelo RPC do server.",
                 variant: "error",
               })
@@ -116,15 +116,15 @@ function showResult(
   successMessage: string,
 ): void {
   if (status.lastError) {
-    show({ title: "LiteLLM (exp)", message: status.lastError, variant: "error" })
+    show({ title: "Gateway (exp)", message: status.lastError, variant: "error" })
     return
   }
   if (status.lastWarning) {
-    show({ title: "LiteLLM (exp)", message: status.lastWarning, variant: "warning" })
+    show({ title: "Gateway (exp)", message: status.lastWarning, variant: "warning" })
     return
   }
   show({
-    title: "LiteLLM (exp)",
+    title: "Gateway (exp)",
     message: `${successMessage} ${status.modelCount} modelo(s) disponível(is).`,
     variant: "success",
   })

@@ -7,8 +7,8 @@ const cases = [
   ["http://pgeodsv1.ep.petrobras.com.br:4001/", "http://pgeodsv1.ep.petrobras.com.br:4001/v1"],
   ["http://pgeodsv1.ep.petrobras.com.br:4001/v1", "http://pgeodsv1.ep.petrobras.com.br:4001/v1"],
   ["http://pgeodsv1.ep.petrobras.com.br:4001/v1///", "http://pgeodsv1.ep.petrobras.com.br:4001/v1"],
-  ["https://gateway.test/litellm", "https://gateway.test/litellm/v1"],
-  ["https://gateway.test/litellm/v1/", "https://gateway.test/litellm/v1"],
+  ["https://gateway.test/gateway", "https://gateway.test/gateway/v1"],
+  ["https://gateway.test/gateway/v1/", "https://gateway.test/gateway/v1"],
 ] as const
 
 test("normaliza endpoint com ou sem /v1 e barras finais", () => {

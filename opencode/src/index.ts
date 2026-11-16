@@ -19,10 +19,10 @@ export default Plugin.define({
     await ctx.integration.transform((editor) => {
       editor.method.update({
         integrationID: INTEGRATION_ID,
-        method: { type: "key", label: "Token do gateway LiteLLM" },
+        method: { type: "key", label: "Token do gateway" },
       })
       editor.update(INTEGRATION_ID, (integration) => {
-        integration.name = "LiteLLM experimental (exp)"
+        integration.name = "Gateway experimental (exp)"
       })
     })
 
