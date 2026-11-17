@@ -22,7 +22,7 @@ describe("global-style injectable file storage", () => {
     const directory = await temp("config");
     const path = join(directory, "agent", "exp-config.json");
     const store = new FileExpConfigStore(path);
-    expect(await store.read()).toEqual({ defaultMaxTokens: 16_384, timeoutMs: 5_000 });
+    expect(await store.read()).toEqual({ defaultMaxTokens: 65_536, timeoutMs: 5_000 });
 
     await store.write({ baseUrl: "https://gateway.test/proxy/v1/", defaultMaxTokens: 8192, timeoutMs: 900 });
     expect(await store.read()).toEqual({

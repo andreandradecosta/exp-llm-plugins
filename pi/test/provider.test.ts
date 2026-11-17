@@ -51,7 +51,7 @@ describe("EXP dynamic provider contract", () => {
     expect(await integration.refresh()).toEqual({ attempted: true });
     expect(discover).toHaveBeenCalledWith(expect.objectContaining({
       baseUrl: DEFAULT_EXP_BASE_URL,
-      defaultMaxTokens: 16_384,
+      defaultMaxTokens: 65_536,
       timeoutMs: 5_000,
     }));
     expect(integration.provider.getModels()[0]?.baseUrl).toBe(DEFAULT_EXP_BASE_URL);

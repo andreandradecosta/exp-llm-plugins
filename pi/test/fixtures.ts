@@ -51,10 +51,10 @@ export function cachedModel(id = "Kimi-K3", baseUrl = "https://gateway.test/v1")
     api: "openai-completions",
     baseUrl,
     input: ["text"],
-    reasoning: false,
+    reasoning: true,
     cost: { ...UNKNOWN_COST },
     contextWindow: 200_000,
-    maxTokens: 16_384,
+    maxTokens: 65_536,
   };
 }
 

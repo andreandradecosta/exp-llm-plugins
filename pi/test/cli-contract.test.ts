@@ -44,7 +44,7 @@ describe("Pi CLI contract", () => {
       if (address === null || typeof address === "string") throw new Error("Missing mock server address");
       await writeFile(join(agentDir, "exp-config.json"), JSON.stringify({
         baseUrl: `http://127.0.0.1:${address.port}`,
-        defaultMaxTokens: 16_384,
+        defaultMaxTokens: 65_536,
         timeoutMs: 2_000,
       }));
       await writeFile(join(agentDir, "auth.json"), JSON.stringify({

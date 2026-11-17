@@ -72,7 +72,7 @@ A configuração opcional é por usuário, no diretório retornado por
 ### Configuração avançada opcional
 
 Use `/exp-configure` somente para alterar o endpoint salvo ou o limite de saída
-padrão (inicialmente `16384`). Esse comando não é necessário no primeiro uso.
+padrão (inicialmente `65536`). Esse comando não é necessário no primeiro uso.
 Se `EXPLLM_HOST` estiver ativo, ele permanece com precedência; o endpoint salvo
 será usado apenas quando a variável for removida ou esvaziada. As mensagens do
 comando deixam essa condição explícita.
@@ -107,7 +107,7 @@ Também é possível revisar a configuração avançada manualmente, por exemplo
 ```json
 {
   "baseUrl": "https://gateway.example.com/v1",
-  "defaultMaxTokens": 16384,
+  "defaultMaxTokens": 65536,
   "timeoutMs": 5000
 }
 ```
@@ -136,12 +136,12 @@ Metadados aplicados:
   todos os modelos;
 - `input`: `text` sempre; `image` somente quando
   `supports_vision === true`;
-- `reasoning`: somente `true` quando `supports_reasoning === true`; nomes de
-  modelos não são usados para inferir raciocínio;
+- `reasoning`: sempre `true`, sem inferência pelo nome do modelo nem consulta a
+  `supports_reasoning`;
 - `contextWindow`: `max_input_tokens` de `/models`, depois o equivalente de
   `/model/info`, `max_tokens` de info ou, por fim, `128000`;
-- `maxTokens`: `max_output_tokens` quando válido, senão `defaultMaxTokens`,
-  limitado pelo tamanho do contexto;
+- `maxTokens`: `max_output_tokens` quando válido, senão `defaultMaxTokens`
+  (padrão `65536`), limitado pelo tamanho do contexto;
 - `cost`: zeros porque o gateway não informa preços. **Zero aqui significa
   custo desconhecido, não serviço gratuito nem preço real.**
 

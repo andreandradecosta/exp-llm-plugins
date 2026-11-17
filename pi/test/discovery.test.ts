@@ -11,7 +11,7 @@ import { jsonResponse, modelInfoFixture, modelsFixture, REAL_MODEL_IDS } from ".
 const defaults = {
   baseUrl: "https://gateway.test/v1/",
   token: "fixture-secret-never-a-real-token",
-  defaultMaxTokens: 16_384,
+  defaultMaxTokens: 65_536,
   timeoutMs: 100,
 };
 
@@ -33,15 +33,15 @@ describe("gateway response parsing and model metadata", () => {
       api: "openai-completions",
       baseUrl: "https://gateway.test/v1",
       input: ["text", "image"],
-      reasoning: false,
+      reasoning: true,
       contextWindow: 200_000,
       maxTokens: 32_768,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     });
-    expect(models.find((model) => model.id === "Kimi-K3.1-Pro")?.reasoning).toBe(true);
+    expect(models.every((model) => model.reasoning)).toBe(true);
     expect(models.find((model) => model.id === "Qwen3.8-27B")).toMatchObject({
       input: ["text"],
-      reasoning: false,
+      reasoning: true,
       maxTokens: 8_192,
     });
     // Every OpenAI-completions model retains normal Pi tool support.
@@ -59,7 +59,8 @@ describe("gateway response parsing and model metadata", () => {
 
     expect(models).toHaveLength(REAL_MODEL_IDS.length);
     expect(models.every((model) => model.input.join(",") === "text")).toBe(true);
-    expect(models.every((model) => model.maxTokens === 16_384)).toBe(true);
+    expect(models.every((model) => model.reasoning)).toBe(true);
+    expect(models.every((model) => model.maxTokens === 65_536)).toBe(true);
     expect(calls.map((call) => call.url).sort()).toEqual([
       "https://gateway.test/v1/model/info",
       "https://gateway.test/v1/models",
@@ -77,17 +78,17 @@ describe("gateway response parsing and model metadata", () => {
         model_info: { max_output_tokens: "99999", supports_vision: true },
       }],
     ]);
-    expect(buildCatalog(listed, info, "https://gateway.test/v1", 16_384)[0]).toMatchObject({
+    expect(buildCatalog(listed, info, "https://gateway.test/v1", 65_536)[0]).toMatchObject({
       contextWindow: 1024,
       maxTokens: 1024,
       input: ["text", "image"],
     });
   });
 
-  it("does not infer reasoning or vision from a model name", () => {
+  it("does not infer vision from a model name and always enables reasoning", () => {
     const listed = parseModelsList({ data: [{ id: "Kimi-K3.1-Pro-reasoning-vision" }] });
-    const [model] = buildCatalog(listed, new Map(), "https://gateway.test/v1", 16_384);
-    expect(model).toMatchObject({ reasoning: false, input: ["text"] });
+    const [model] = buildCatalog(listed, new Map(), "https://gateway.test/v1", 65_536);
+    expect(model).toMatchObject({ reasoning: true, input: ["text"] });
   });
 
   it("ignores malformed optional info but rejects malformed authoritative models", () => {

@@ -35,7 +35,6 @@ interface ModelInfoEntry {
     max_tokens?: string | number;
     max_output_tokens?: string | number;
     supports_vision?: unknown;
-    supports_reasoning?: unknown;
   };
 }
 
@@ -190,7 +189,7 @@ export function buildCatalog(
       api: "openai-completions",
       baseUrl: normalizedBaseUrl,
       input: metadata?.supports_vision === true ? ["text", "image"] : ["text"],
-      reasoning: metadata?.supports_reasoning === true,
+      reasoning: true,
       cost: { ...UNKNOWN_COST },
       contextWindow,
       maxTokens,

@@ -4,7 +4,7 @@ export const CONFIG_FILE_NAME = "exp-config.json";
 export const CATALOG_FILE_NAME = "exp-models.json";
 
 export const DEFAULT_EXP_BASE_URL = "http://pgeodsv1.ep.petrobras.com.br:4001/v1";
-export const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
+export const DEFAULT_MAX_OUTPUT_TOKENS = 65_536;
 export const DEFAULT_CONTEXT_WINDOW = 128_000;
 export const DEFAULT_TIMEOUT_MS = 5_000;
 export const MIN_TIMEOUT_MS = 100;
