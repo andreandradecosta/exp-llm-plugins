@@ -138,6 +138,8 @@ Metadados aplicados:
   `supports_vision === true`;
 - `reasoning`: sempre `true`, sem inferência pelo nome do modelo nem consulta a
   `supports_reasoning`;
+- `compat.supportsDeveloperRole`: `false`, pois compatibilidade com OpenAI Chat
+  Completions não garante suporte à role `developer`; as instruções usam `system`;
 - `contextWindow`: `max_input_tokens` de `/models`, depois o equivalente de
   `/model/info`, `max_tokens` de info ou, por fim, `128000`;
 - `maxTokens`: `max_output_tokens` quando válido, senão `defaultMaxTokens`

@@ -190,6 +190,8 @@ export function buildCatalog(
       baseUrl: normalizedBaseUrl,
       input: metadata?.supports_vision === true ? ["text", "image"] : ["text"],
       reasoning: true,
+      // OpenAI compatibility does not imply support for the newer developer role.
+      compat: { supportsDeveloperRole: false },
       cost: { ...UNKNOWN_COST },
       contextWindow,
       maxTokens,

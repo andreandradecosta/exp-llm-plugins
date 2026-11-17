@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { completeSimple } from "@earendil-works/pi-ai/compat";
 import {
   buildCatalog,
   GatewayDiscoveryClient,
@@ -89,6 +90,42 @@ describe("gateway response parsing and model metadata", () => {
     const listed = parseModelsList({ data: [{ id: "Kimi-K3.1-Pro-reasoning-vision" }] });
     const [model] = buildCatalog(listed, new Map(), "https://gateway.test/v1", 65_536);
     expect(model).toMatchObject({ reasoning: true, input: ["text"] });
+  });
+
+  it("keeps reasoning enabled while serializing instructions with the system role", async () => {
+    const listed = parseModelsList({ data: [{ id: "Qwen3.8-27B" }] });
+    const [model] = buildCatalog(listed, new Map(), "https://gateway.test/v1", 65_536);
+    if (!model) throw new Error("Expected one discovered model");
+    const chunk = JSON.stringify({
+      id: "fixture-completion",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: model.id,
+      choices: [{ index: 0, delta: { role: "assistant", content: "OK" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+    });
+    const fetchMock = vi.fn(async () => new Response(`data: ${chunk}\n\ndata: [DONE]\n\n`, {
+      headers: { "Content-Type": "text/event-stream" },
+    }));
+    let roles: string[] = [];
+
+    const result = await completeSimple(model, {
+      systemPrompt: "Reply to the user.",
+      messages: [{ role: "user", content: "Hello", timestamp: 0 }],
+    }, {
+      apiKey: "fixture-secret-never-a-real-token",
+      fetch: fetchMock,
+      reasoning: "medium",
+      onPayload: (payload) => {
+        const request = payload as { messages: Array<{ role: string }> };
+        roles = request.messages.map((message) => message.role);
+      },
+    });
+
+    expect(result.stopReason, result.errorMessage).toBe("stop");
+    expect(model).toMatchObject({ reasoning: true, compat: { supportsDeveloperRole: false } });
+    expect(roles).toEqual(["system", "user"]);
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it("ignores malformed optional info but rejects malformed authoritative models", () => {
