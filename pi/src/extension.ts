@@ -53,9 +53,9 @@ export function createExpExtension(
 
     if (startup.error) {
       // Discovery errors contain status/URL metadata only, never response
-      // bodies, credentials, or request headers. This also makes list-models
-      // and other non-interactive startup failures visible.
-      console.error(`[exp] ${errorMessage(startup.error)}`);
+      // bodies, credentials, or request headers. Interactive sessions surface
+      // the failure through a UI notification; headless runs such as
+      // --list-models stay quiet, like any other provider without models.
       pi.on("session_start", (_event, ctx) => {
         if (ctx.hasUI) {
           ctx.ui.notify(`EXP catalog refresh failed: ${errorMessage(startup.error)}`, "warning");

@@ -84,7 +84,7 @@ describe("extension initialization and /exp-configure", () => {
     expect(fixture.commands.has("exp-configure")).toBe(true);
   });
 
-  it("does not request UI, start watchers or call the gateway in headless use", async () => {
+  it("does not request UI, start watchers, call the gateway or print errors in headless use", async () => {
     const configStore = new InMemoryExpConfigStore();
     const discover = vi.fn(async () => [cachedModel()]);
     const integration = createExpIntegration({
@@ -94,15 +94,43 @@ describe("extension initialization and /exp-configure", () => {
       discoveryClient: { discover },
     });
     const watch = vi.fn();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const mock = fakePi();
-    await createExpExtension(integration, { watch, authPath: "/tmp/headless/auth.json" })(mock.pi);
-    expect(mock.providers).toHaveLength(1);
-    expect(mock.commands.has("exp-configure")).toBe(true);
-    expect(discover).not.toHaveBeenCalled();
-    expect(watch).not.toHaveBeenCalled();
+    try {
+      await createExpExtension(integration, { watch, authPath: "/tmp/headless/auth.json" })(mock.pi);
+      expect(mock.providers).toHaveLength(1);
+      expect(mock.commands.has("exp-configure")).toBe(true);
+      expect(discover).not.toHaveBeenCalled();
+      expect(watch).not.toHaveBeenCalled();
 
-    await mock.emit("session_start", commandContext([], false).ctx);
-    expect(watch).not.toHaveBeenCalled();
+      await mock.emit("session_start", commandContext([], false).ctx);
+      expect(watch).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("notifies the startup failure in interactive sessions without stderr noise", async () => {
+    const integration = createExpIntegration({
+      configStore: new InMemoryExpConfigStore(),
+      catalogStore: new InMemoryModelsStore(),
+      readCredential: () => undefined,
+      discoveryClient: { discover: vi.fn(async () => [cachedModel()]) },
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const mock = fakePi();
+    try {
+      await createExpExtension(integration, { watch: null })(mock.pi);
+      const { ctx, notifications } = commandContext([]);
+      await mock.emit("session_start", ctx);
+
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(notifications.at(-1)?.message).toContain("EXP catalog refresh failed");
+      expect(notifications.at(-1)?.message).toContain("/exp-configure");
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it("saves only endpoint metadata interactively and directs token entry to /login", async () => {

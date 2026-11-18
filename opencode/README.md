@@ -96,7 +96,7 @@ conta, desde que o endpoint esteja configurado.
 ## Descoberta e metadados
 
 Com o Bearer da credencial nativa ativa, o server consulta, apenas para
-**descoberta**:
+**descoberta**, com as duas requisições em paralelo:
 
 1. `GET {baseURL}/models` — obrigatório e fonte autoritativa dos IDs;
 2. `GET {baseURL}/model/info` — enriquecimento opcional.
@@ -164,8 +164,8 @@ endpoint e conexão autenticada.
   válido para a conexão atual. Na primeira falha, quando ainda não há cache,
   `/exp-status` informa explicitamente que nenhum catálogo está disponível.
 - Cada chamada HTTP tem timeout próprio (`requestTimeoutMs`, default: **15000 ms**),
-  inclusive durante a leitura do corpo. Como as duas chamadas são sequenciais, um
-  refresh com falha do endpoint opcional pode levar até dois timeouts.
+  inclusive durante a leitura do corpo. As duas chamadas são feitas em paralelo,
+  portanto um refresh com falha leva no máximo um timeout.
 
 Erros não incluem corpo de resposta, header Authorization, token ou payload
 sensível. O plugin também não escreve esses dados em logs.

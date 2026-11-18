@@ -289,3 +289,62 @@ def test_configure_com_endpoint_invalido_nao_salva_nem_vaza_token() -> None:
     assert token not in result.output
     assert not config_path().exists()
     assert not (config_path().parent / "keys.json").exists()
+
+
+def test_configure_falha_ao_salvar_token_nao_salva_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_store(token: str) -> None:
+        raise OSError("disco cheio")
+
+    monkeypatch.setattr(plugin, "_store_api_key", fail_store)
+    result = CliRunner().invoke(
+        plugin.exp,
+        ["configure"],
+        input="token-nao-salvo\nhttps://gateway.example.com/\n",
+    )
+    assert result.exit_code != 0
+    assert "token" in result.output
+    assert "token-nao-salvo" not in result.output
+    assert not config_path().exists()
+    assert not (config_path().parent / "keys.json").exists()
+
+
+def test_configure_falha_ao_salvar_endpoint_mantem_token_e_orienta_repeticao(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_save(api_base: str) -> None:
+        raise OSError("disco cheio")
+
+    monkeypatch.setattr(plugin, "save_endpoint", fail_save)
+    result = CliRunner().invoke(
+        plugin.exp,
+        ["configure"],
+        input="token-mantido\nhttps://gateway.example.com/\n",
+    )
+    assert result.exit_code != 0
+    assert "endpoint" in result.output
+    assert "token-mantido" not in result.output
+    assert not config_path().exists()
+    assert llm.get_key(key_alias="exp", env_var="EXP_API_KEY") == "token-mantido"
+
+
+def test_configure_sem_mecanismo_nativo_de_chaves_orienta_e_nao_salva_nada(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import llm.cli
+
+    class Unavailable:
+        callback = None
+
+    monkeypatch.setattr(llm.cli, "keys_set", Unavailable())
+    result = CliRunner().invoke(
+        plugin.exp,
+        ["configure"],
+        input="token-sem-mecanismo\nhttps://gateway.example.com/\n",
+    )
+    assert result.exit_code != 0
+    assert "mecanismo nativo de chaves do llm" in result.output
+    assert "token-sem-mecanismo" not in result.output
+    assert not config_path().exists()
+    assert not (config_path().parent / "keys.json").exists()

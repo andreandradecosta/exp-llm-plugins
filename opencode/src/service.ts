@@ -211,11 +211,11 @@ export class ExpService {
           this.lastRefreshValue = "error"
           this.lastErrorValue = "Falha interna ao atualizar o catálogo. O catálogo anterior foi mantido."
         }
-        return this.status()
       })
       .finally(() => {
         if (this.active?.promise === promise) this.active = undefined
       })
+      // Recompute once after the active slot is cleared so `refreshing` is accurate.
       .then(() => this.status())
     this.active = { revision, promise }
     return promise

@@ -1,6 +1,13 @@
 from pathlib import Path
 
 import llm
+# Importado antes de qualquer monkeypatch: llm.cli faz `from llm import user_dir`
+# e mantém essa referência para sempre. Sem isto, o primeiro import aconteceria
+# durante um teste com `llm.user_dir` já parcheado e o `keys_set` nativo passaria
+# a gravar no diretório temporário daquele teste nas execuções seguintes. Com o
+# import antecipado, o binding é o da função original, que lê LLM_USER_PATH a
+# cada chamada, como na execução real do CLI.
+import llm.cli  # noqa: F401
 import pytest
 
 

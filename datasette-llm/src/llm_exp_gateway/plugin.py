@@ -32,7 +32,7 @@ Register = Callable[..., None]
 
 
 def _warn(message: str) -> None:
-    click.echo(f"llm-llm-gateway: {message}", err=True)
+    click.echo(f"exp-gateway: {message}", err=True)
 
 
 def _discovery_timeout() -> float:
@@ -124,7 +124,7 @@ def _store_api_key(token: str) -> None:
 
     callback = keys_set.callback
     if callback is None:
-        raise click.ClickException(
+        raise OSError(
             "O mecanismo nativo de chaves do llm não está disponível."
         )
     callback(KEY_ALIAS, token)
@@ -147,11 +147,18 @@ def configure() -> None:
     except ValueError as exc:
         raise click.ClickException(str(exc)) from None
     try:
-        save_endpoint(api_base)
         _store_api_key(token)
     except OSError as exc:
         raise click.ClickException(
-            f"Não foi possível salvar a configuração: {type(exc).__name__}."
+            f"Não foi possível salvar o token no mecanismo nativo de chaves "
+            f"do llm: {type(exc).__name__}."
+        ) from None
+    try:
+        save_endpoint(api_base)
+    except OSError as exc:
+        raise click.ClickException(
+            f"Não foi possível salvar o endpoint: {type(exc).__name__}. "
+            "O token já foi salvo; execute o comando novamente."
         ) from None
     click.echo(
         "Gateway configurado. O token foi armazenado no mecanismo nativo de "

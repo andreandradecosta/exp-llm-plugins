@@ -49,6 +49,31 @@ test("contrato HTTP usa /v1/models, /v1/model/info e Bearer sem inferência", as
   assert.equal(result.metadataStatus, "available")
 })
 
+test("requisições de models e model/info são concorrentes", async () => {
+  let resolveModels: ((response: Response) => void) | undefined
+  let infoRequested = false
+  const fetchImplementation = mockFetch((url) => {
+    if (url.endsWith("/models")) {
+      return new Promise<Response>((resolve) => {
+        resolveModels = resolve
+      })
+    }
+    infoRequested = true
+    return json({ data: [] })
+  })
+
+  const discovery = discoverGateway(input(fetchImplementation))
+  for (let attempt = 0; attempt < 100 && !infoRequested; attempt += 1) {
+    await new Promise<void>((resolve) => setImmediate(resolve))
+  }
+  assert.equal(infoRequested, true, "model/info deve ser solicitado sem aguardar /models")
+  assert.ok(resolveModels, "/models ainda deve estar pendente")
+  resolveModels(json({ object: "list", data: [{ id: "alpha", created: 1 }] }))
+
+  const result = await discovery
+  assert.equal(result.metadataStatus, "available")
+})
+
 test("falha 401 de model/info não bloqueia e orienta autenticação", async () => {
   const fetchImplementation = mockFetch((url) => url.endsWith("/models")
     ? json({ object: "list", data: [{ id: "alpha", created: 1 }] })

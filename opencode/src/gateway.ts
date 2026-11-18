@@ -11,31 +11,47 @@ export interface DiscoverInput extends TokenFallbacks {
 
 export async function discoverGateway(input: DiscoverInput): Promise<DiscoveryResult> {
   const fetchImplementation = input.fetchImplementation ?? fetch
-  const payload = await getJson(input, "/models", fetchImplementation)
 
+  const [modelsResponse, infoResponse] = await Promise.allSettled([
+    getJson(input, "/models", fetchImplementation),
+    getJson(input, "/model/info", fetchImplementation),
+  ])
+
+  if (modelsResponse.status === "rejected") throw modelsResponse.reason
+
+  // Parsing is deliberately performed only after the authoritative request succeeds.
   let models
   try {
-    // Parsing is deliberately performed only after the authoritative request succeeds.
-    models = buildCatalogModels(payload, { data: [] }, input)
+    models = buildCatalogModels(modelsResponse.value, { data: [] }, input)
   } catch {
     throw new SafeError("Resposta inválida de /models. Nenhum catálogo novo foi aplicado.")
   }
 
-  try {
-    const info = await getJson(input, "/model/info", fetchImplementation)
-    return {
-      models: buildCatalogModels(payload, info, input),
-      metadataStatus: "available",
-    }
-  } catch (error) {
-    const message = error instanceof SafeError
-      ? error.message
+  if (infoResponse.status === "rejected") {
+    const message = infoResponse.reason instanceof SafeError
+      ? infoResponse.reason.message
       : "Metadados opcionais indisponíveis em /model/info."
     return {
       models,
       metadataStatus: "unavailable",
       metadataWarning: `${message} O catálogo básico de /models foi aplicado.`,
     }
+  }
+
+  let enriched
+  try {
+    enriched = buildCatalogModels(modelsResponse.value, infoResponse.value, input)
+  } catch {
+    return {
+      models,
+      metadataStatus: "unavailable",
+      metadataWarning: "Metadados opcionais indisponíveis em /model/info. O catálogo básico de /models foi aplicado.",
+    }
+  }
+
+  return {
+    models: enriched,
+    metadataStatus: "available",
   }
 }
 

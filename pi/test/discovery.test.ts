@@ -71,6 +71,18 @@ describe("gateway response parsing and model metadata", () => {
     }
   });
 
+  it("refuses redirects so the Bearer token is never forwarded elsewhere", async () => {
+    const fetchMock = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      if (init?.redirect !== "error") throw new Error("redirects must be refused by the request");
+      return jsonResponse(modelsFixture);
+    });
+
+    const models = await new GatewayDiscoveryClient(fetchMock).discover(defaults);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(models).toHaveLength(REAL_MODEL_IDS.length);
+  });
+
   it("supports numeric strings and clamps output limits to context", () => {
     const listed = parseModelsList({ data: [{ id: "small", max_input_tokens: "1024" }] });
     const info = new Map([

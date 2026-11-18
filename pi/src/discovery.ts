@@ -78,6 +78,8 @@ export class GatewayDiscoveryClient implements DiscoveryClient {
         response = await this.fetchImpl(url, {
           method: "GET",
           headers: { ...headers, Accept: "application/json" },
+          // A redirect must never forward the Bearer header elsewhere.
+          redirect: "error",
           signal: controller.signal,
         });
       } catch (error) {

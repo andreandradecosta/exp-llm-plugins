@@ -214,12 +214,9 @@ async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
     await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     await rename(temporary, path);
   } finally {
-    try {
-      await unlink(temporary);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        // The atomic rename already committed the non-secret destination.
-      }
-    }
+    // Best-effort cleanup: after a successful rename the temporary file no
+    // longer exists, and a cleanup failure must not mask the original error
+    // after the non-secret destination was already committed.
+    await unlink(temporary).catch(() => {});
   }
 }
