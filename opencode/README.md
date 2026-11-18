@@ -1,4 +1,4 @@
-# opencode-exp-gateway
+# opencode-llm-gateway
 
 Plugin **OpenCode V2** para descobrir e usar modelos de um gateway compatível
 com a API OpenAI. O provider é registrado como `exp`; os modelos aparecem como
@@ -15,7 +15,7 @@ Depois que este pacote npm estiver publicado, instale-o globalmente pela CLI do
 OpenCode:
 
 ```sh
-opencode plugin add opencode-exp-gateway@1.0.0
+opencode plugin add opencode-llm-gateway@1.0.0
 opencode plugin list
 ```
 
@@ -31,7 +31,7 @@ Para desenvolvimento local, execute `npm run build` e referencie o diretório em
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
     {
-      "package": "/caminho/absoluto/para/opencode-exp-gateway",
+      "package": "/caminho/absoluto/para/opencode-llm-gateway",
       "options": {
         "fallbackContextTokens": 128000,
         "fallbackOutputTokens": 16384,

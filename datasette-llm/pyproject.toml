@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llm-exp-gateway"
+name = "llm-llm-gateway"
 version = "0.1.0"
 description = "Modelos de um gateway LiteLLM compatível com OpenAI para o CLI llm"
 readme = "README.md"

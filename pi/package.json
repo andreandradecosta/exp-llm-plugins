@@ -1,5 +1,5 @@
 {
-  "name": "pi-provider-exp",
+  "name": "pi-llm-gateway",
   "version": "1.0.0",
   "description": "Dynamic EXP OpenAI-compatible provider for Pi",
   "type": "module",

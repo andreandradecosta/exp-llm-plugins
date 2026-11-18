@@ -1,4 +1,4 @@
-# pi-provider-exp
+# pi-llm-gateway
 
 Pacote de extensão do [Pi](https://pi.dev/) para um gateway EXP compatível com
 OpenAI Chat Completions. O provider é `exp` e os modelos aparecem como
@@ -21,7 +21,7 @@ pi install /caminho/absoluto/para/pi
 Após a publicação no npm, também poderá ser instalado por:
 
 ```bash
-pi install npm:pi-provider-exp@1.0.0
+pi install npm:pi-llm-gateway@1.0.0
 ```
 
 Os pacotes `@earendil-works/pi-coding-agent` e

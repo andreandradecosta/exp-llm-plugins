@@ -1,4 +1,4 @@
-# llm-exp-gateway
+# llm-llm-gateway
 
 Plugin para o [CLI `llm`](https://llm.datasette.io/) de Simon Willison que
 descobre modelos publicados por um gateway LiteLLM compatível com a API OpenAI.
@@ -15,7 +15,7 @@ ID original. Assim, `exp/Kimi-K3` chama o modelo `Kimi-K3` no gateway.
 No ambiente em que o `llm` está instalado:
 
 ```bash
-llm install llm-exp-gateway
+llm install llm-llm-gateway
 ```
 
 Para uma cópia local em desenvolvimento:

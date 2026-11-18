@@ -26,7 +26,7 @@ Register = Callable[..., None]
 
 
 def _warn(message: str) -> None:
-    click.echo(f"llm-exp-gateway: {message}", err=True)
+    click.echo(f"llm-llm-gateway: {message}", err=True)
 
 
 def _discovery_timeout() -> float:
