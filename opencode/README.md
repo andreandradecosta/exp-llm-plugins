@@ -47,27 +47,26 @@ host devem ser acompanhadas por typecheck e testes de instalação do pacote.
 
 ## Configuração e autenticação
 
-Não é necessário executar um setup inicial. O plugin já usa o endpoint:
+Antes da primeira descoberta, é obrigatório informar explicitamente o endpoint.
+O plugin não tem endpoint padrão nem obtém essa configuração de variáveis de
+ambiente. Abra o OpenCode e execute:
 
 ```text
-http://pgeodsv1.ep.petrobras.com.br:4001
+/exp-setup
 ```
 
-Internamente, ele é normalizado para
-`http://pgeodsv1.ep.petrobras.com.br:4001/v1`. Para testar outro endpoint,
-defina `EXPLLM_HOST` antes de abrir o OpenCode:
+Informe a URL do gateway no prompt interativo, por exemplo
+`https://gateway.example.com`. O endpoint normalizado é persistido em
+`ctx.storage` e reutilizado nas execuções seguintes até ser substituído por um
+novo `/exp-setup`. Também são aceitos endpoints com `/v1`, barras finais e
+caminhos-base adicionais. A URL precisa ser absoluta e usar HTTP ou HTTPS.
+Credenciais na URL, query strings e fragmentos são recusados.
 
-```sh
-EXPLLM_HOST=https://gateway.example.com opencode
-```
+Sem endpoint configurado, o plugin não faz descoberta HTTP nem publica modelos.
+`/exp-refresh`, `/exp-status` e a atualização automática do TUI orientam o
+usuário a executar `/exp-setup`.
 
-A precedência é `EXPLLM_HOST`, endpoint persistido por uma configuração
-anterior e, por fim, o endpoint padrão. Também são aceitos endpoints com `/v1`,
-barras finais e caminhos-base adicionais. A URL precisa ser absoluta e usar HTTP
-ou HTTPS. Credenciais na URL, query strings e fragmentos são recusados. Um valor
-inválido em `EXPLLM_HOST` é reportado sem recorrer silenciosamente ao padrão.
-
-Abra o OpenCode e execute somente o fluxo nativo de autenticação:
+Depois de configurar o endpoint, execute somente o fluxo nativo de autenticação:
 
 ```text
 /connect
@@ -81,19 +80,18 @@ ou prompts de sessão.
 Finalize em `/models`, escolhendo um modelo `exp/<id>`. O plugin não altera o
 modelo default selecionado pelo usuário.
 
-Comandos adicionais:
+Comandos disponíveis:
 
+- `/exp-setup`: informa ou substitui o endpoint persistido; não aceita token.
 - `/exp-refresh`: força uma atualização do catálogo.
 - `/exp-status`: mostra endpoint, estado da conexão, data do cache, metadados e
   a última falha segura, sem mostrar o token.
-- `/exp-setup`: comando opcional de compatibilidade para persistir outro
-  endpoint quando `EXPLLM_HOST` não estiver definida. Não faz parte do fluxo
-  inicial e não aceita token.
 
 O TUI chama o RPC de refresh ao abrir, pois o server compartilhado pode continuar
-ativo entre sessões do TUI. A inicialização do server também atualiza o catálogo.
-Eventos nativos `credential.updated` e `credential.switched` fazem novas
-descobertas após login, troca ou remoção da conta.
+ativo entre sessões do TUI. A inicialização do server também solicita a
+atualização do catálogo. Eventos nativos `credential.updated` e
+`credential.switched` fazem novas descobertas após login, troca ou remoção da
+conta, desde que o endpoint esteja configurado.
 
 ## Descoberta e metadados
 
@@ -146,9 +144,8 @@ orientação para autenticar novamente por `/connect`.
 ## Persistência, cache e concorrência
 
 O endpoint informado por `/exp-setup` e o último catálogo válido são persistidos
-em `ctx.storage`, sem segredos. O endpoint padrão e `EXPLLM_HOST` não são gravados
-nessa configuração. O token fica no mecanismo nativo de contas do OpenCode
-(SQLite no server V2), gerenciado por `/connect`.
+em `ctx.storage`, sem segredos. O token fica no mecanismo nativo de contas do
+OpenCode (SQLite no server V2), gerenciado por `/connect`.
 
 Cada catálogo fica associado ao endpoint e à identidade não secreta da conexão
 que o descobriu. A definição do provider usa `sourceConnection`, impedindo que
@@ -208,4 +205,4 @@ validado localmente com OpenCode 2.3.0 em HOME isolado: ativação server/RPC,
 conexão nativa por API, descoberta dos 9 modelos, configuração compartilhada por
 dois projetos, inferência real e chamada da ferramenta `read`. Os comandos TUI
 foram verificados por typecheck; antes da publicação, convém também exercitar o
-fluxo visual `/connect` e `/models` na interface de destino, sem setup inicial.
+fluxo visual `/exp-setup`, `/connect` e `/models` na interface de destino.

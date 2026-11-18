@@ -1,32 +1,19 @@
-import { DEFAULT_EXP_BASE_URL } from "./constants.ts";
 import { ExpConfigError } from "./errors.ts";
 
 export interface ExpEndpointConfig {
   baseUrl?: string;
 }
 
-/** Resolve the runtime endpoint without allowing an invalid environment override to fall back. */
-export function resolveExpBaseUrl(
-  config: ExpEndpointConfig,
-  environment: NodeJS.ProcessEnv = process.env,
-): string {
-  const environmentBaseUrl = environment.EXPLLM_HOST;
-  if (environmentBaseUrl?.trim()) {
-    try {
-      return normalizeBaseUrl(environmentBaseUrl);
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : "invalid URL";
-      throw new ExpConfigError(`Invalid EXPLLM_HOST: ${detail}`, { cause: error });
-    }
-  }
-  return normalizeBaseUrl(config.baseUrl ?? DEFAULT_EXP_BASE_URL);
+/** Resolve the explicitly configured runtime endpoint. */
+export function resolveExpBaseUrl(config: ExpEndpointConfig): string {
+  return normalizeBaseUrl(config.baseUrl ?? "");
 }
 
 /** Canonicalize an EXP URL to the OpenAI-compatible /v1 base. */
 export function normalizeBaseUrl(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
-    throw new ExpConfigError("EXP endpoint is required");
+    throw new ExpConfigError("EXP endpoint is required; configure it with /exp-configure in interactive Pi");
   }
 
   let url: URL;

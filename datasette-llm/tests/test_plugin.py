@@ -11,7 +11,6 @@ from llm.default_plugins.openai_models import AsyncChat, Chat
 import llm_exp_gateway.plugin as plugin
 from llm_exp_gateway.gateway import DiscoveryError, RemoteModel
 from llm_exp_gateway.storage import (
-    DEFAULT_ENDPOINT,
     cache_path,
     config_path,
     save_cached_catalog,
@@ -28,54 +27,52 @@ def collect_registrations(registrations: Registrations) -> Callable[..., None]:
     return register
 
 
-def test_hook_sem_configuracao_e_sem_token_nativo_nao_faz_rede(
+def test_hook_sem_configuracao_nao_faz_rede(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv("EXPLLM_KEY", "chave-manual-nao-deve-ser-lida")
 
     def unexpected_fetch(*args: object, **kwargs: object) -> list[RemoteModel]:
-        raise AssertionError("rede não deveria ser chamada sem token nativo")
+        raise AssertionError("rede não deveria ser chamada sem endpoint salvo")
 
     monkeypatch.setattr(plugin, "fetch_catalog", unexpected_fetch)
     registrations: Registrations = []
     plugin.register_models(collect_registrations(registrations))
     assert registrations == []
     captured = capsys.readouterr()
-    assert "token não configurado" in captured.err
+    assert "endpoint não configurado" in captured.err
+    assert "llm exp configure" in captured.err
     assert "chave-manual-nao-deve-ser-lida" not in captured.err + captured.out
     assert not config_path().exists()
 
 
-def test_hook_sem_configuracao_com_token_nativo_tenta_endpoint_padrao(
-    monkeypatch: pytest.MonkeyPatch,
+def test_hook_sem_configuracao_com_token_nativo_nao_faz_discovery(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(plugin.llm, "get_key", lambda **kwargs: "segredo-nativo")
-    calls: list[tuple[str, str]] = []
 
-    def fake_fetch(base: str, key: str, timeout: float) -> list[RemoteModel]:
-        calls.append((base, key))
-        return [RemoteModel("Kimi-K3")]
+    def unexpected_fetch(*args: object, **kwargs: object) -> list[RemoteModel]:
+        raise AssertionError("token sem endpoint salvo não permite descoberta")
 
-    monkeypatch.setattr(plugin, "fetch_catalog", fake_fetch)
+    monkeypatch.setattr(plugin, "fetch_catalog", unexpected_fetch)
     registrations: Registrations = []
     plugin.register_models(collect_registrations(registrations))
 
-    assert calls == [(DEFAULT_ENDPOINT, "segredo-nativo")]
-    assert [sync.api_base for sync, _ in registrations] == [DEFAULT_ENDPOINT]
+    assert registrations == []
+    assert "llm exp configure" in capsys.readouterr().err
     assert not config_path().exists()
-    assert "segredo-nativo" not in cache_path().read_text(encoding="utf-8")
+    assert not cache_path().exists()
 
 
-def test_hook_com_ambiente_invalido_nao_faz_fallback_silencioso(
+def test_hook_com_endpoint_salvo_invalido_nao_faz_fallback_silencioso(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     api_base = "https://arquivo.example.com/v1"
-    save_endpoint(api_base)
+    save_endpoint("://endereco-invalido")
     save_cached_catalog(api_base, [RemoteModel("Kimi-K3")])
-    monkeypatch.setenv("EXPLLM_HOST", "://endereco-invalido")
 
     def unexpected_call(*args: object, **kwargs: object) -> None:
-        raise AssertionError("ambiente inválido deve interromper a descoberta")
+        raise AssertionError("endpoint inválido deve interromper a descoberta")
 
     monkeypatch.setattr(plugin, "fetch_catalog", unexpected_call)
     monkeypatch.setattr(plugin.llm, "get_key", unexpected_call)
@@ -84,7 +81,7 @@ def test_hook_com_ambiente_invalido_nao_faz_fallback_silencioso(
 
     assert registrations == []
     captured = capsys.readouterr()
-    assert "EXPLLM_HOST inválido" in captured.err
+    assert "URL HTTP ou HTTPS válida" in captured.err
     assert "endereco-invalido" not in captured.err + captured.out
 
 
@@ -255,6 +252,7 @@ def test_configure_interativo_usa_chave_nativa_e_nao_vaza_token(
     isolated_llm_user_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     token = "token-teste-nunca-exibir"
+    api_base = "https://gateway.example.com/v1"
 
     def unexpected_fetch(*args: object, **kwargs: object) -> list[RemoteModel]:
         raise AssertionError("configure não pode fazer discovery")
@@ -263,15 +261,15 @@ def test_configure_interativo_usa_chave_nativa_e_nao_vaza_token(
     result = CliRunner().invoke(
         plugin.exp,
         ["configure"],
-        input=f"{token}\n",
+        input=f"{token}\nhttps://gateway.example.com/\n",
     )
     assert result.exit_code == 0, result.output
     assert token not in result.output
-    assert "Endpoint do gateway" not in result.output
+    assert "Endpoint do gateway" in result.output
     config_raw = config_path().read_text(encoding="utf-8")
     assert token not in config_raw
     config = json.loads(config_raw)
-    assert config == {"version": 1, "api_base": DEFAULT_ENDPOINT}
+    assert config == {"version": 1, "api_base": api_base}
     assert not cache_path().exists()
     assert llm.get_key(key_alias="exp", env_var="EXP_API_KEY") == token
     native_keys = isolated_llm_user_dir / "keys.json"
@@ -279,19 +277,15 @@ def test_configure_interativo_usa_chave_nativa_e_nao_vaza_token(
     assert native_keys.stat().st_mode & 0o777 == 0o600
 
 
-def test_configure_com_ambiente_invalido_nao_salva_nem_vaza_token(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_configure_com_endpoint_invalido_nao_salva_nem_vaza_token() -> None:
     token = "segredo-configure"
-    monkeypatch.setenv("EXPLLM_HOST", "://endereco-invalido")
     result = CliRunner().invoke(
         plugin.exp,
         ["configure"],
-        input=f"{token}\n",
+        input=f"{token}\n://endereco-invalido\n",
     )
     assert result.exit_code != 0
-    assert "EXPLLM_HOST inválido" in result.output
+    assert "URL HTTP ou HTTPS válida" in result.output
     assert token not in result.output
-    assert "endereco-invalido" not in result.output
     assert not config_path().exists()
     assert not (config_path().parent / "keys.json").exists()

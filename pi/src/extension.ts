@@ -3,7 +3,7 @@ import { getAgentDir, readStoredCredential } from "@earendil-works/pi-coding-age
 import { join } from "node:path";
 import type { Credential } from "@earendil-works/pi-ai/compat";
 import { LOGIN_INSTRUCTIONS, apiKeyFromCredential } from "./auth.ts";
-import { DEFAULT_EXP_BASE_URL, DEFAULT_MAX_OUTPUT_TOKENS, PROVIDER_ID } from "./constants.ts";
+import { DEFAULT_MAX_OUTPUT_TOKENS, PROVIDER_ID } from "./constants.ts";
 import { normalizeBaseUrl } from "./endpoint.ts";
 import { errorMessage } from "./errors.ts";
 import { positiveInteger } from "./config.ts";
@@ -57,7 +57,9 @@ export function createExpExtension(
       // and other non-interactive startup failures visible.
       console.error(`[exp] ${errorMessage(startup.error)}`);
       pi.on("session_start", (_event, ctx) => {
-        ctx.ui.notify(`EXP catalog refresh failed: ${errorMessage(startup.error)}`, "warning");
+        if (ctx.hasUI) {
+          ctx.ui.notify(`EXP catalog refresh failed: ${errorMessage(startup.error)}`, "warning");
+        }
       });
     }
   };
@@ -65,7 +67,7 @@ export function createExpExtension(
 
 function registerConfigureCommand(pi: ExtensionAPI, integration: ExpIntegration): void {
   pi.registerCommand("exp-configure", {
-    description: "Advanced EXP settings; EXPLLM_HOST takes precedence over the saved endpoint",
+    description: "Configure the EXP gateway endpoint and model defaults",
     handler: async (_args, ctx) => {
       if (!ctx.hasUI) {
         ctx.ui.notify("Use /exp-configure in interactive Pi; do not put tokens in commands or files.", "warning");
@@ -73,10 +75,9 @@ function registerConfigureCommand(pi: ExtensionAPI, integration: ExpIntegration)
       }
 
       const current = await integration.configStore.read();
-      const environmentOverridesEndpoint = Boolean(process.env.EXPLLM_HOST?.trim());
       const endpointInput = await ctx.ui.input(
-        "Saved EXP gateway base URL, used when EXPLLM_HOST is unset (with or without /v1)",
-        current.baseUrl ?? DEFAULT_EXP_BASE_URL,
+        "EXP gateway base URL (required; with or without /v1)",
+        current.baseUrl ?? "",
       );
       if (endpointInput === undefined) return;
 
@@ -110,16 +111,12 @@ function registerConfigureCommand(pi: ExtensionAPI, integration: ExpIntegration)
 
       const refreshed = await integration.refresh(ctx.signal);
       pi.registerProvider(integration.provider);
-      const endpointNotice = environmentOverridesEndpoint
-        ? "EXPLLM_HOST remains active; the saved endpoint applies only when it is unset."
-        : "Endpoint saved.";
+      const endpointNotice = "Endpoint saved.";
       if (refreshed.error) {
         ctx.ui.notify(`${endpointNotice} Catalog refresh failed: ${errorMessage(refreshed.error)}`, "warning");
       } else if (refreshed.attempted) {
         ctx.ui.notify(
-          environmentOverridesEndpoint
-            ? `${endpointNotice} ${integration.provider.getModels().length} models available from the active endpoint.`
-            : `EXP configured: ${integration.provider.getModels().length} models available`,
+          `EXP configured: ${integration.provider.getModels().length} models available`,
           "info",
         );
         return;

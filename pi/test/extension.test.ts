@@ -121,19 +121,19 @@ describe("extension initialization and /exp-configure", () => {
     expect(notifications.at(-1)?.message).not.toContain("fixture-token");
   });
 
-  it("does not present a saved endpoint as replacing active EXPLLM_HOST", async () => {
+  it("ignores EXPLLM_HOST and presents the saved endpoint as active", async () => {
     vi.stubEnv("EXPLLM_HOST", "https://environment.test");
     const fixture = await extensionFixture();
-    const { ctx, notifications } = commandContext(["https://saved-for-later.test", "8192"]);
+    const { ctx, notifications } = commandContext(["https://saved.test", "8192"]);
     await fixture.commands.get("exp-configure")?.handler("", ctx);
 
     expect(await fixture.configStore.read()).toMatchObject({
-      baseUrl: "https://saved-for-later.test/v1",
+      baseUrl: "https://saved.test/v1",
       defaultMaxTokens: 8192,
     });
-    expect(notifications.at(-1)?.message).toContain("EXPLLM_HOST remains active");
-    expect(notifications.at(-1)?.message).toContain("only when it is unset");
-    expect(notifications.at(-1)?.message).not.toContain("EXP configured");
+    expect(notifications.at(-1)?.message).toContain("Endpoint saved.");
+    expect(notifications.at(-1)?.message).not.toContain("EXPLLM_HOST remains active");
+    expect(notifications.at(-1)?.message).not.toContain("only when it is unset");
   });
 
   it("refreshes after simulated login, token replacement and removal, then cleans up reload resources", async () => {

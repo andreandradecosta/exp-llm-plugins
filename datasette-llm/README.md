@@ -29,40 +29,27 @@ editar configuração do `llm` para habilitá-lo.
 
 ## Configuração interativa
 
-O endpoint padrão é `http://pgeodsv1.ep.petrobras.com.br:4001`, normalizado
-internamente para `http://pgeodsv1.ep.petrobras.com.br:4001/v1`. Na ausência
-de um endpoint persistido ou de um override de ambiente, a descoberta usa esse
-endereço; não é necessário criar um arquivo de configuração para o endpoint.
-
+Não há endpoint padrão nem configuração de endpoint por variável de ambiente.
 Execute:
 
 ```bash
 llm exp configure
 ```
 
-O comando solicita **somente o token**, com entrada oculta. O token é salvo com
-o nome `exp` pelo mesmo mecanismo usado por `llm keys set exp`; ele não é
-argumento de shell e, portanto, não entra no histórico de comandos nem é
-exibido pelo plugin. O comando também registra somente metadados públicos do
-endpoint efetivo (já normalizado para `/v1`), sem armazenar o token nesse
-arquivo.
+O comando solicita o **token**, com entrada oculta, e o **endpoint do gateway**,
+que é obrigatório. O token é salvo com o nome `exp` pelo mesmo mecanismo usado
+por `llm keys set exp`; ele não é argumento de shell e, portanto, não entra no
+histórico de comandos nem é exibido pelo plugin. O endpoint pode ser informado
+com ou sem `/v1` e com ou sem barra final, e é persistido normalizado para
+`/v1`. O arquivo de configuração contém somente esse metadado público, nunca o
+token.
 
-A resolução do endpoint segue esta ordem:
-
-1. `EXPLLM_HOST` não vazia;
-2. endpoint previamente persistido em `exp-gateway.json`;
-3. endpoint padrão.
-
-`EXPLLM_HOST` tem precedência em runtime, inclusive durante a execução de
-`llm exp configure`, e aceita o endereço com ou sem `/v1` e com ou sem barra
-final. Um valor não vazio inválido produz um erro seguro, sem expor o conteúdo
-da variável e sem recuar silenciosamente para o arquivo ou para o padrão.
+Sem um endpoint salvo, o plugin não faz descoberta HTTP e orienta a executar
+`llm exp configure`, sem interromper os demais comandos do `llm`.
 
 Também é possível usar as variáveis de ambiente:
 
 - `EXP_API_KEY`: token, como alternativa ao armazenamento nativo de chaves;
-- `EXPLLM_HOST`: override opcional do endpoint, com a precedência descrita
-  acima;
 - `EXP_DISCOVERY_TIMEOUT`: timeout em segundos de cada consulta HTTP (padrão
   `3.0`; valores inválidos ou não positivos voltam ao padrão).
 
@@ -131,10 +118,10 @@ rename atômico, evitando IDs obsoletos ou duplicados. O isolamento por endpoint
 impede reutilizar o catálogo de outro gateway. Se a renovação falhar, o último
 catálogo válido do mesmo endpoint é usado temporariamente e uma mensagem clara
 é emitida no stderr. Na primeira falha, sem cache, o plugin não interrompe os
-demais comandos do `llm`. Mesmo sem arquivo de configuração, a descoberta tenta
-o endpoint padrão quando encontra o token no mecanismo nativo de chaves (ou em
-`EXP_API_KEY`). Sem token, nenhuma requisição é feita e só pode haver fallback
-ao cache público já existente.
+demais comandos do `llm`. Sem endpoint salvo, nenhuma requisição é feita. Com
+endpoint salvo, mas sem token no mecanismo nativo de chaves ou em
+`EXP_API_KEY`, também não há requisição e só pode haver fallback ao cache
+público do mesmo endpoint.
 
 ## Desenvolvimento e testes
 

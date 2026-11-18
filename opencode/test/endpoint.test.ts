@@ -3,10 +3,10 @@ import test from "node:test"
 import { normalizeEndpoint } from "../src/endpoint.ts"
 
 const cases = [
-  ["http://pgeodsv1.ep.petrobras.com.br:4001", "http://pgeodsv1.ep.petrobras.com.br:4001/v1"],
-  ["http://pgeodsv1.ep.petrobras.com.br:4001/", "http://pgeodsv1.ep.petrobras.com.br:4001/v1"],
-  ["http://pgeodsv1.ep.petrobras.com.br:4001/v1", "http://pgeodsv1.ep.petrobras.com.br:4001/v1"],
-  ["http://pgeodsv1.ep.petrobras.com.br:4001/v1///", "http://pgeodsv1.ep.petrobras.com.br:4001/v1"],
+  ["http://gateway.test:4001", "http://gateway.test:4001/v1"],
+  ["http://gateway.test:4001/", "http://gateway.test:4001/v1"],
+  ["http://gateway.test:4001/v1", "http://gateway.test:4001/v1"],
+  ["http://gateway.test:4001/v1///", "http://gateway.test:4001/v1"],
   ["https://gateway.test/gateway", "https://gateway.test/gateway/v1"],
   ["https://gateway.test/gateway/v1/", "https://gateway.test/gateway/v1"],
 ] as const

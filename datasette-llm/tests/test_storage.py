@@ -67,39 +67,29 @@ def test_cache_nao_contem_campos_extras_nem_credenciais() -> None:
     }
 
 
-def test_sem_arquivo_usa_endpoint_padrao_normalizado() -> None:
+def test_sem_arquivo_exige_configuracao_explicita() -> None:
     assert not storage.config_path().exists()
-    assert storage.configured_endpoint() == (
-        "http://pgeodsv1.ep.petrobras.com.br:4001/v1"
-    )
+    with pytest.raises(storage.ConfigurationError) as caught:
+        storage.configured_endpoint()
+    assert "endpoint não configurado" in str(caught.value)
+    assert "llm exp configure" in str(caught.value)
 
 
-def test_endpoint_persistido_tem_precedencia_sobre_o_padrao() -> None:
+def test_endpoint_persistido_e_utilizado() -> None:
     storage.save_endpoint("https://arquivo.example.com/v1")
     assert storage.configured_endpoint() == "https://arquivo.example.com/v1"
 
 
-def test_endpoint_de_ambiente_nao_vazio_tem_precedencia(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    storage.save_endpoint("https://arquivo.example.com/v1")
-    monkeypatch.setenv("EXPLLM_HOST", "https://ambiente.example.com")
-    assert storage.configured_endpoint() == "https://ambiente.example.com/v1"
-
-    monkeypatch.setenv("EXPLLM_HOST", "   ")
+def test_endpoint_persistido_e_normalizado_na_leitura() -> None:
+    storage.save_endpoint("https://arquivo.example.com/")
     assert storage.configured_endpoint() == "https://arquivo.example.com/v1"
 
 
-def test_ambiente_invalido_erro_seguro_sem_fallback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    storage.save_endpoint("https://arquivo.example.com/v1")
-    monkeypatch.setenv(
-        "EXPLLM_HOST", "https://ambiente.example.com/?segredo=nao-expor"
-    )
+def test_endpoint_persistido_invalido_gera_erro_seguro() -> None:
+    storage.save_endpoint("https://arquivo.example.com/?segredo=nao-expor")
     with pytest.raises(storage.ConfigurationError) as caught:
         storage.configured_endpoint()
     message = str(caught.value)
-    assert "EXPLLM_HOST" in message
+    assert "query string" in message
     assert "segredo" not in message
     assert "nao-expor" not in message

@@ -13,8 +13,6 @@ from .gateway import RemoteModel, normalize_endpoint
 
 CONFIG_FILENAME = "exp-gateway.json"
 CACHE_FILENAME = "exp-gateway-models.json"
-ENV_ENDPOINT = "EXPLLM_HOST"
-DEFAULT_ENDPOINT = "http://pgeodsv1.ep.petrobras.com.br:4001/v1"
 
 
 class ConfigurationError(Exception):
@@ -55,16 +53,12 @@ def save_endpoint(api_base: str) -> None:
 
 
 def configured_endpoint() -> str:
-    """Resolve o endpoint por ambiente, configuração persistida ou padrão."""
-    environment_value = os.environ.get(ENV_ENDPOINT, "").strip()
-    if environment_value:
-        try:
-            return normalize_endpoint(environment_value)
-        except ValueError as exc:
-            raise ConfigurationError(f"{ENV_ENDPOINT} inválido: {exc}") from None
+    """Carrega o endpoint explicitamente persistido pelo usuário."""
     path = config_path()
     if not path.exists():
-        return DEFAULT_ENDPOINT
+        raise ConfigurationError(
+            "endpoint não configurado; execute 'llm exp configure'."
+        )
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:

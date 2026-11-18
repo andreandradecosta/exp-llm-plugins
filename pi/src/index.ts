@@ -23,7 +23,6 @@ export type { ExpEndpointConfig } from "./endpoint.ts";
 export { createExpAuth, apiKeyFromCredential } from "./auth.ts";
 export {
   DEFAULT_CONTEXT_WINDOW,
-  DEFAULT_EXP_BASE_URL,
   DEFAULT_MAX_OUTPUT_TOKENS,
   DEFAULT_TIMEOUT_MS,
   PROVIDER_ID,

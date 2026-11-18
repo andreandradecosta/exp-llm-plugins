@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { DEFAULT_EXP_BASE_URL } from "../src/constants.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { discoveryUrl, normalizeBaseUrl, resolveExpBaseUrl } from "../src/endpoint.ts";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("EXP endpoint normalization", () => {
   it.each([
@@ -35,29 +38,27 @@ describe("EXP endpoint normalization", () => {
     expect(() => normalizeBaseUrl(input)).toThrow();
   });
 
-  it("uses the built-in normalized endpoint for a clean installation", () => {
-    expect(DEFAULT_EXP_BASE_URL).toBe("http://pgeodsv1.ep.petrobras.com.br:4001/v1");
-    expect(resolveExpBaseUrl({}, {})).toBe("http://pgeodsv1.ep.petrobras.com.br:4001/v1");
+  it("requires an explicitly configured endpoint on a clean installation", () => {
+    expect(() => resolveExpBaseUrl({})).toThrow(/EXP endpoint is required.*\/exp-configure/);
   });
 
-  it.each([undefined, "", "   "])("uses the persisted endpoint when EXPLLM_HOST is empty (%s)", (host) => {
-    expect(resolveExpBaseUrl(
-      { baseUrl: "https://persisted.test/proxy" },
-      { ...(host === undefined ? {} : { EXPLLM_HOST: host }) },
-    )).toBe("https://persisted.test/proxy/v1");
+  it("uses and normalizes only the persisted endpoint", () => {
+    expect(resolveExpBaseUrl({ baseUrl: "https://persisted.test/proxy" })).toBe(
+      "https://persisted.test/proxy/v1",
+    );
   });
 
-  it("gives a non-empty EXPLLM_HOST precedence and normalizes it", () => {
-    expect(resolveExpBaseUrl(
-      { baseUrl: "https://persisted.test/v1" },
-      { EXPLLM_HOST: " http://environment.test:4001/proxy/ " },
-    )).toBe("http://environment.test:4001/proxy/v1");
+  it("ignores a non-empty EXPLLM_HOST instead of overriding the persisted endpoint", () => {
+    vi.stubEnv("EXPLLM_HOST", " http://environment.test:4001/proxy/ ");
+    expect(resolveExpBaseUrl({ baseUrl: "https://persisted.test/v1" })).toBe(
+      "https://persisted.test/v1",
+    );
   });
 
-  it("rejects an invalid EXPLLM_HOST instead of using a persisted fallback", () => {
-    expect(() => resolveExpBaseUrl(
-      { baseUrl: "https://persisted.test/v1" },
-      { EXPLLM_HOST: "not-an-absolute-url" },
-    )).toThrow(/Invalid EXPLLM_HOST/);
+  it("ignores an invalid EXPLLM_HOST without rejecting the persisted endpoint", () => {
+    vi.stubEnv("EXPLLM_HOST", "not-an-absolute-url");
+    expect(resolveExpBaseUrl({ baseUrl: "https://persisted.test/v1" })).toBe(
+      "https://persisted.test/v1",
+    );
   });
 });

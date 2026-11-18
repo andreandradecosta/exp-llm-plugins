@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { DEFAULT_ENDPOINT, STORAGE_CATALOG_KEY, STORAGE_ENDPOINT_KEY } from "../src/config.ts"
+import { STORAGE_CATALOG_KEY, STORAGE_ENDPOINT_KEY } from "../src/config.ts"
 import { SafeError } from "../src/errors.ts"
 import type { DiscoverInput } from "../src/gateway.ts"
 import { ExpService, type ExpServiceDependencies, type ServerStorage } from "../src/service.ts"
@@ -37,7 +37,6 @@ function deferred<Value>() {
 async function harness(
   discover?: (input: DiscoverInput) => Promise<DiscoveryResult>,
   storedEndpoint: string | null = "https://one.test/v1",
-  environment: Readonly<Record<string, string | undefined>> = {},
 ) {
   const values = new Map<string, unknown>()
   const storage: Pick<ServerStorage, "get" | "set"> = {
@@ -52,7 +51,6 @@ async function harness(
   let publications = 0
   const dependencies: ExpServiceDependencies = {
     storage,
-    environment,
     activeConnection: async () => activeConnection,
     resolveCredential: async () => activeCredential,
     publish: async () => {
@@ -76,63 +74,74 @@ async function harness(
   }
 }
 
-test("instalação limpa usa o endpoint padrão sem persistir configuração", async () => {
-  const { service, values } = await harness(async (request) => {
-    assert.equal(request.endpoint, DEFAULT_ENDPOINT)
-    return discovery("default-model")
+test("instalação limpa orienta /exp-setup sem descobrir nem publicar catálogo", async () => {
+  let calls = 0
+  const { service, values, publications } = await harness(async () => {
+    calls++
+    return discovery("never")
   }, null)
 
+  assert.match(service.status().lastError ?? "", /\/exp-setup/)
   const status = await service.refresh()
-  assert.equal(status.configured, true)
-  assert.equal(status.endpoint, DEFAULT_ENDPOINT)
-  assert.equal(service.providerSnapshot()?.info.settings?.baseURL, DEFAULT_ENDPOINT)
-  assert.deepEqual(service.providerSnapshot()?.models.map((item) => item.id), ["default-model"])
+  assert.equal(calls, 0)
+  assert.equal(publications(), 0)
+  assert.equal(status.configured, false)
+  assert.equal(status.endpoint, null)
+  assert.equal(status.lastRefresh, "error")
+  assert.match(status.lastError ?? "", /\/exp-setup/)
+  assert.equal(status.modelCount, 0)
+  assert.equal(service.providerSnapshot(), undefined)
   assert.equal(values.has(STORAGE_ENDPOINT_KEY), false)
 })
 
-test("EXPLLM_HOST normalizada tem precedência sobre endpoint persistido", async () => {
+test("endpoint configurado explicitamente é persistido e reutilizado na próxima execução", async () => {
   const { service, values } = await harness(async (request) => {
-    assert.equal(request.endpoint, "https://ambiente.test/proxy/v1")
-    return discovery("environment-model")
-  }, "https://persistido.test/v1", { EXPLLM_HOST: "https://ambiente.test/proxy/" })
+    assert.equal(request.endpoint, "https://explicito.test/proxy/v1")
+    return discovery("configured")
+  }, null)
 
-  const status = await service.refresh()
-  assert.equal(status.endpoint, "https://ambiente.test/proxy/v1")
-  assert.equal(values.get(STORAGE_ENDPOINT_KEY), "https://persistido.test/v1")
-  assert.equal(service.providerSnapshot()?.info.settings?.baseURL, "https://ambiente.test/proxy/v1")
+  const configured = await service.configure("https://explicito.test/proxy/")
+  assert.equal(configured.lastRefresh, "success")
+  assert.equal(values.get(STORAGE_ENDPOINT_KEY), "https://explicito.test/proxy/v1")
 
-  const configured = await service.configure("https://outro.test")
-  assert.equal(configured.endpoint, "https://ambiente.test/proxy/v1")
-  assert.match(configured.lastError ?? "", /EXPLLM_HOST/)
-  assert.equal(values.get(STORAGE_ENDPOINT_KEY), "https://persistido.test/v1")
+  const restored = new ExpService({
+    storage: {
+      get: async (key) => values.get(key) as Awaited<ReturnType<ServerStorage["get"]>>,
+      set: async (key, value) => {
+        values.set(key, structuredClone(value))
+      },
+    },
+    activeConnection: async () => connection,
+    resolveCredential: async () => credential,
+    publish: async () => undefined,
+    discover: async (request) => {
+      assert.equal(request.endpoint, "https://explicito.test/proxy/v1")
+      return discovery("restored")
+    },
+  }, options)
+  await restored.initialize()
+  assert.equal(restored.status().endpoint, "https://explicito.test/proxy/v1")
+
+  const status = await restored.refresh()
+  assert.equal(status.lastRefresh, "success")
+  assert.deepEqual(restored.providerSnapshot()?.models.map((item) => item.id), ["restored"])
+  assert.equal(restored.providerSnapshot()?.info.settings?.baseURL, "https://explicito.test/proxy/v1")
 })
 
-test("EXPLLM_HOST inválida não usa fallback silencioso nem consulta gateway", async () => {
+test("endpoint persistido inválido orienta nova configuração sem consultar gateway", async () => {
   let calls = 0
   const { service } = await harness(async () => {
     calls++
     return discovery("never")
-  }, "https://persistido.test/v1", { EXPLLM_HOST: "endpoint-sem-esquema" })
+  }, "endpoint-sem-esquema")
 
   const status = await service.refresh()
   assert.equal(calls, 0)
   assert.equal(status.configured, false)
   assert.equal(status.endpoint, null)
   assert.equal(status.lastRefresh, "error")
+  assert.match(status.lastError ?? "", /endpoint persistido é inválido.*\/exp-setup/)
   assert.equal(service.providerSnapshot(), undefined)
-})
-
-test("EXPLLM_KEY não é consultada durante configuração e descoberta", async () => {
-  const environment = {
-    get EXPLLM_KEY(): string {
-      throw new Error("EXPLLM_KEY não deve ser lida pelo plugin")
-    },
-  }
-  const { service } = await harness(async () => discovery("default-model"), null, environment)
-
-  const status = await service.refresh()
-  assert.equal(status.endpoint, DEFAULT_ENDPOINT)
-  assert.equal(status.modelCount, 1)
 })
 
 test("catálogo válido é publicado como exp/<id> sem credencial no provider", async () => {

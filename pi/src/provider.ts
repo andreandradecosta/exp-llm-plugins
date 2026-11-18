@@ -9,7 +9,7 @@ import {
   type RefreshModelsContext,
 } from "@earendil-works/pi-ai/compat";
 import { apiKeyFromCredential, createExpAuth } from "./auth.ts";
-import { FileExpCatalogStore, FileExpConfigStore, type ExpConfig, type ExpConfigStore } from "./config.ts";
+import { FileExpCatalogStore, FileExpConfigStore, type ExpConfigStore } from "./config.ts";
 import { PROVIDER_ID, PROVIDER_NAME } from "./constants.ts";
 import { resolveExpBaseUrl } from "./endpoint.ts";
 import { ExpDiscoveryError } from "./errors.ts";
@@ -118,6 +118,13 @@ export function createExpIntegration(options: ExpIntegrationOptions): ExpIntegra
     provider,
     configStore: options.configStore,
     async refresh(signal = new AbortController().signal): Promise<ExpRefreshResult> {
+      try {
+        resolveExpBaseUrl(await options.configStore.read());
+      } catch (error) {
+        // Missing or invalid endpoint configuration must not restore or publish a catalog.
+        return { attempted: false, error: asError(error) };
+      }
+
       let stored;
       try {
         stored = await options.catalogStore.read(PROVIDER_ID, { signal });
@@ -132,13 +139,6 @@ export function createExpIntegration(options: ExpIntegrationOptions): ExpIntegra
         credential = await options.readCredential();
       } catch {
         setupError = new Error("Cannot read the EXP credential from Pi storage");
-      }
-      let config: ExpConfig | undefined;
-      try {
-        config = await options.configStore.read();
-        resolveExpBaseUrl(config);
-      } catch (error) {
-        setupError = asError(error);
       }
       const attempted = !setupError && Boolean(apiKeyFromCredential(credential)) && !signal.aborted;
       const publications = createStartupPublisher(options.catalogStore, signal);

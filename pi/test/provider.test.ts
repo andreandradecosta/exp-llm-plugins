@@ -8,7 +8,7 @@ import type { DiscoveryClient, DiscoveryOptions } from "../src/discovery.ts";
 import { InMemoryExpConfigStore } from "../src/config.ts";
 import { createExpIntegration } from "../src/provider.ts";
 import { cachedModel } from "./fixtures.ts";
-import { DEFAULT_EXP_BASE_URL } from "../src/constants.ts";
+
 
 beforeEach(() => {
   vi.stubEnv("EXPLLM_HOST", "");
@@ -37,76 +37,79 @@ async function authenticatedRuntime(
 }
 
 describe("EXP dynamic provider contract", () => {
-  it("discovers with the default endpoint and preserved defaults on a clean installation", async () => {
-    const discover = vi.fn(async (options: DiscoveryOptions) => [
-      cachedModel("default-endpoint-model", options.baseUrl),
-    ]);
+  it("requires an endpoint without discovering, reading or restoring a catalog", async () => {
+    const modelsStore = new InMemoryModelsStore();
+    await modelsStore.write("exp", { models: [cachedModel("must-not-restore")], checkedAt: 1 });
+    const read = vi.spyOn(modelsStore, "read");
+    const discover = vi.fn(async () => [cachedModel()]);
     const integration = createExpIntegration({
       configStore: new InMemoryExpConfigStore(),
-      catalogStore: new InMemoryModelsStore(),
+      catalogStore: modelsStore,
       readCredential: () => ({ type: "api_key", key: "clean-install-token" }),
+      discoveryClient: { discover },
+    });
+
+    const result = await integration.refresh();
+    expect(result.attempted).toBe(false);
+    expect(result.error?.message).toMatch(/EXP endpoint is required.*\/exp-configure/);
+    expect(read).not.toHaveBeenCalled();
+    expect(discover).not.toHaveBeenCalled();
+    expect(integration.provider.getModels()).toEqual([]);
+  });
+
+  it("ignores EXPLLM_HOST and discovers only from the persisted endpoint", async () => {
+    vi.stubEnv("EXPLLM_HOST", "http://environment.test:4001/proxy");
+    const discover = vi.fn(async (options: DiscoveryOptions) => [
+      cachedModel("persisted-endpoint-model", options.baseUrl),
+    ]);
+    const integration = createExpIntegration({
+      configStore: new InMemoryExpConfigStore({ baseUrl: "https://persisted.test" }),
+      catalogStore: new InMemoryModelsStore(),
+      readCredential: () => ({ type: "api_key", key: "persisted-endpoint-token" }),
       discoveryClient: { discover },
     });
 
     expect(await integration.refresh()).toEqual({ attempted: true });
     expect(discover).toHaveBeenCalledWith(expect.objectContaining({
-      baseUrl: DEFAULT_EXP_BASE_URL,
+      baseUrl: "https://persisted.test/v1",
       defaultMaxTokens: 65_536,
       timeoutMs: 5_000,
     }));
-    expect(integration.provider.getModels()[0]?.baseUrl).toBe(DEFAULT_EXP_BASE_URL);
+    expect(integration.provider.getModels()[0]?.baseUrl).toBe("https://persisted.test/v1");
   });
 
-  it("gives EXPLLM_HOST precedence over the persisted endpoint during discovery", async () => {
-    vi.stubEnv("EXPLLM_HOST", "http://environment.test:4001/proxy");
-    const discover = vi.fn(async (options: DiscoveryOptions) => [
-      cachedModel("environment-endpoint-model", options.baseUrl),
-    ]);
-    const integration = createExpIntegration({
-      configStore: new InMemoryExpConfigStore({ baseUrl: "https://persisted.test" }),
-      catalogStore: new InMemoryModelsStore(),
-      readCredential: () => ({ type: "api_key", key: "precedence-token" }),
-      discoveryClient: { discover },
-    });
-
-    await integration.refresh();
-    expect(discover).toHaveBeenCalledWith(expect.objectContaining({
-      baseUrl: "http://environment.test:4001/proxy/v1",
-    }));
-    expect(integration.provider.getModels()[0]?.baseUrl).toBe("http://environment.test:4001/proxy/v1");
-  });
-
-  it("reports invalid EXPLLM_HOST without discovering or restoring a persisted-endpoint cache", async () => {
+  it("ignores an invalid EXPLLM_HOST without rejecting the persisted endpoint", async () => {
     vi.stubEnv("EXPLLM_HOST", "invalid-endpoint");
     const modelsStore = new InMemoryModelsStore();
     await modelsStore.write("exp", {
       models: [cachedModel("persisted-cache", "https://persisted.test/v1")],
       checkedAt: 1,
     });
-    const discover = vi.fn(async () => [cachedModel()]);
+    const discover = vi.fn(async (options: DiscoveryOptions) => [
+      cachedModel("persisted-discovery", options.baseUrl),
+    ]);
     const integration = createExpIntegration({
       configStore: new InMemoryExpConfigStore({ baseUrl: "https://persisted.test" }),
       catalogStore: modelsStore,
-      readCredential: () => ({ type: "api_key", key: "invalid-env-token" }),
+      readCredential: () => ({ type: "api_key", key: "ignored-env-token" }),
       discoveryClient: { discover },
     });
 
-    const result = await integration.refresh();
-    expect(result.attempted).toBe(false);
-    expect(result.error?.message).toMatch(/Invalid EXPLLM_HOST/);
-    expect(discover).not.toHaveBeenCalled();
-    expect(integration.provider.getModels()).toEqual([]);
+    expect(await integration.refresh()).toEqual({ attempted: true });
+    expect(discover).toHaveBeenCalledWith(expect.objectContaining({ baseUrl: "https://persisted.test/v1" }));
+    expect(integration.provider.getModels().map((model) => model.id)).toEqual(["persisted-discovery"]);
   });
 
-  it("drops live and cached models from the old endpoint after an EXPLLM_HOST switch", async () => {
+  it("drops live and cached models from the old endpoint after a persisted endpoint switch", async () => {
     const discover = vi.fn(async (options: DiscoveryOptions) => {
       if (options.baseUrl === "https://persisted.test/v1") {
         return [cachedModel("old-live-model", options.baseUrl)];
       }
       throw new Error("new endpoint unavailable");
     });
+    const configStore = new InMemoryExpConfigStore({ baseUrl: "https://persisted.test" });
     const integration = createExpIntegration({
-      configStore: new InMemoryExpConfigStore({ baseUrl: "https://persisted.test" }),
+      configStore,
       catalogStore: new InMemoryModelsStore(),
       readCredential: () => ({ type: "api_key", key: "switch-endpoint-token" }),
       discoveryClient: { discover },
@@ -114,10 +117,10 @@ describe("EXP dynamic provider contract", () => {
     await integration.refresh();
     expect(integration.provider.getModels().map((model) => model.id)).toEqual(["old-live-model"]);
 
-    vi.stubEnv("EXPLLM_HOST", "https://environment.test");
+    await configStore.write({ ...await configStore.read(), baseUrl: "https://new-persisted.test" });
     const result = await integration.refresh();
     expect(result.error?.message).toBe("new endpoint unavailable");
-    expect(discover).toHaveBeenLastCalledWith(expect.objectContaining({ baseUrl: "https://environment.test/v1" }));
+    expect(discover).toHaveBeenLastCalledWith(expect.objectContaining({ baseUrl: "https://new-persisted.test/v1" }));
     expect(integration.provider.getModels()).toEqual([]);
   });
 
@@ -256,7 +259,7 @@ describe("EXP dynamic provider contract", () => {
     vi.stubEnv("EXPLLM_KEY", "environment-token-must-not-be-used");
     const discover = vi.fn(async () => [cachedModel()]);
     const integration = createExpIntegration({
-      configStore: new InMemoryExpConfigStore(),
+      configStore: new InMemoryExpConfigStore({ baseUrl: "https://gateway.test" }),
       catalogStore: new InMemoryModelsStore(),
       readCredential: () => undefined,
       discoveryClient: { discover },

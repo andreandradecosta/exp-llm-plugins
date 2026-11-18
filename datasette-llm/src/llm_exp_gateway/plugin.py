@@ -9,7 +9,13 @@ import click
 import llm
 from llm.default_plugins.openai_models import AsyncChat, Chat
 
-from .gateway import DEFAULT_TIMEOUT, DiscoveryError, RemoteModel, fetch_catalog
+from .gateway import (
+    DEFAULT_TIMEOUT,
+    DiscoveryError,
+    RemoteModel,
+    fetch_catalog,
+    normalize_endpoint,
+)
 from .storage import (
     ConfigurationError,
     configured_endpoint,
@@ -131,13 +137,14 @@ def exp() -> None:
 
 @exp.command(name="configure")
 def configure() -> None:
-    """Solicita somente o token sem exibir nem registrar o segredo."""
+    """Solicita o token sem exibi-lo e o endpoint obrigatório do gateway."""
     token = click.prompt("Token da API", hide_input=True, type=str)
     if not token:
         raise click.ClickException("O token não pode ser vazio.")
+    endpoint = click.prompt("Endpoint do gateway", type=str)
     try:
-        api_base = configured_endpoint()
-    except (ConfigurationError, ValueError) as exc:
+        api_base = normalize_endpoint(endpoint)
+    except ValueError as exc:
         raise click.ClickException(str(exc)) from None
     try:
         save_endpoint(api_base)

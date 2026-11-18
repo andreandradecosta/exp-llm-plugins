@@ -23,8 +23,9 @@ uv pip install --python .venv/bin/python -e './datasette-llm[dev]'
 uv build ./datasette-llm --out-dir /tmp/opencode/llm-exp-dist
 ```
 
-Validações com `EXPLLM_HOST` e `EXPLLM_KEY` do `.env` devem usar diretórios
-temporários e configuração/credenciais isoladas das configurações pessoais.
+Validações manuais com endpoints e `EXPLLM_KEY` do `.env` devem usar
+diretórios temporários e configuração/credenciais isoladas das configurações
+pessoais.
 Nunca imprimir ou salvar tokens em logs, fixtures, caches e exemplos.
 
 ## Regras de commit
