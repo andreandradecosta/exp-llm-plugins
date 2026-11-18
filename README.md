@@ -70,3 +70,33 @@ streaming e chamada de ferramenta em cada harness.
 
 Para o desenvolvimento Python, utilize o ambiente virtual `.venv` na raiz do
 repositório, criado e atualizado com `uv`.
+
+## Integração contínua e publicação
+
+O GitHub Actions executa testes, verificação de tipos e build dos três pacotes
+em cada pull request e push em `main`
+([`ci.yml`](.github/workflows/ci.yml)). O workflow
+[`release.yml`](.github/workflows/release.yml) é acionado por tags `vX.Y.Z`.
+
+Os três pacotes compartilham a mesma versão: a tag publica somente os pacotes
+cuja versão no manifesto (`package.json` ou `pyproject.toml`) coincide com a
+versão da tag, e diz no log o que foi ignorado por divergência. Ao alterar a
+versão, atualize os três manifestos e crie a tag correspondente:
+
+```sh
+git tag v1.0.0 && git push origin v1.0.0   # npm: opencode e pi; PyPI: llm-llm-gateway
+```
+
+Antes de deixar a tag chegar no repositório, configure:
+
+- o segredo `NPM_TOKEN`, com um token de publicação das organizações do npm dos
+  pacotes `opencode-llm-gateway` e `pi-llm-gateway`;
+- o *trusted publisher* do PyPI para o projeto `llm-llm-gateway`, apontando para
+  este repositório e para o arquivo `release.yml` (não é necessária senha nem
+  token armazenado no GitHub);
+- opcionalmente, a variável `OPENCODE_REGISTRY_URL` e o segredo
+  `OPENCODE_REGISTRY_TOKEN` para espelhar `opencode-llm-gateway` no registry
+  do OpenCode.
+
+Repetir uma versão já publicada falha no job; para republicar, incremente a
+versão dos três manifestos e crie uma nova tag.
