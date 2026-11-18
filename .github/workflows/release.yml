@@ -4,6 +4,10 @@ name: Release
 # versionado de forma independente: a tag publica somente os pacotes cuja
 # versão no manifesto coincide exatamente com a versão da tag, e todos os jobs
 # de publicação dependem dos testes de todo o repositório.
+#
+# Destinos: os pacotes JavaScript vão para o npmjs; o plugin do CLI llm vai para
+# o PyPI. O OpenCode e o Pi instalam plugins a partir do npm, então não há
+# registry adicional a espelhar.
 on:
   push:
     tags:
@@ -98,46 +102,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  publish-npm-registry:
-    name: publish npm (opencode registry)
-    needs:
-      - verify-node
-      - verify-python
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: opencode
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: opencode/package-lock.json
-      - run: npm ci
-      - run: npm run build
-      - name: Conferir versão da tag
-        id: version
-        run: |
-          actual="$(node -p 'require("./package.json").version')"
-          if [ "${RELEASE_TAG#v}" != "$actual" ]; then
-            echo "Tag $RELEASE_TAG não corresponde à versão $actual de opencode/package.json; nada será publicado." >&2
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          fi
-      # O OpenCode instala plugins pelo próprio registry, que é um espelho à
-      # parte do npmjs. Esta publicação é opcional: só roda quando a variável
-      # OPENCODE_REGISTRY_URL e o segredo OPENCODE_REGISTRY_TOKEN existem.
-      - name: Publicar no registry do OpenCode
-        if: steps.version.outputs.publish == 'true' && vars.OPENCODE_REGISTRY_URL != '' && secrets.OPENCODE_REGISTRY_TOKEN != ''
-        run: npm publish --registry "$OPENCODE_REGISTRY_URL" --access public
-        env:
-          OPENCODE_REGISTRY_URL: ${{ vars.OPENCODE_REGISTRY_URL }}
-          NODE_AUTH_TOKEN: ${{ secrets.OPENCODE_REGISTRY_TOKEN }}
-
   publish-pypi:
-    name: publish PyPI (llm-llm-gateway)
+    name: publish PyPI (llm-exp-gateway)
     needs:
       - verify-node
       - verify-python

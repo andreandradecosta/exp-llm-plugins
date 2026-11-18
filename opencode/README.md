@@ -11,7 +11,7 @@ validações manuais de desenvolvimento, não é consultada pelo plugin.
 
 ## Instalação global
 
-Depois que este pacote npm estiver publicado, instale-o globalmente pela CLI do
+Depois de publicar este pacote no npm, instale-o globalmente pela CLI do
 OpenCode:
 
 ```sh

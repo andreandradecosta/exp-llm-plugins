@@ -84,19 +84,22 @@ versão da tag, e diz no log o que foi ignorado por divergência. Ao alterar a
 versão, atualize os três manifestos e crie a tag correspondente:
 
 ```sh
-git tag v1.0.0 && git push origin v1.0.0   # npm: opencode e pi; PyPI: llm-llm-gateway
+git tag v1.0.0 && git push origin v1.0.0   # npmjs: opencode e pi; PyPI: llm-exp-gateway
 ```
+
+Os pacotes JavaScript são distribuídos apenas pelo npmjs, de onde tanto o
+OpenCode quanto o Pi instalam plugins. O OpenCode não possui registry próprio.
 
 Antes de deixar a tag chegar no repositório, configure:
 
-- o segredo `NPM_TOKEN`, com um token de publicação das organizações do npm dos
-  pacotes `opencode-llm-gateway` e `pi-llm-gateway`;
-- o *trusted publisher* do PyPI para o projeto `llm-llm-gateway`, apontando para
-  este repositório e para o arquivo `release.yml` (não é necessária senha nem
-  token armazenado no GitHub);
-- opcionalmente, a variável `OPENCODE_REGISTRY_URL` e o segredo
-  `OPENCODE_REGISTRY_TOKEN` para espelhar `opencode-llm-gateway` no registry
-  do OpenCode.
+- o segredo `NPM_TOKEN`, com um token granular que tenha permissão de publicação
+  nos pacotes (não escopados) `opencode-llm-gateway` e `pi-llm-gateway`; um único
+  token atende os dois;
+- o *pending publisher* do PyPI para o projeto `llm-exp-gateway`, em
+  *Account settings → Publishing*, apontando para este repositório e para o
+  arquivo `release.yml` (não é necessária senha nem token armazenado no GitHub).
+  O nome do projeto só fica reservado a partir da primeira publicação: se outro
+  projeto o registrar antes, o *pending publisher* é invalidado.
 
 Repetir uma versão já publicada falha no job; para republicar, incremente a
 versão dos três manifestos e crie uma nova tag.

@@ -1,4 +1,4 @@
-"""Plugin llm-llm-gateway."""
+"""Plugin llm-exp-gateway."""
 
 from .plugin import configure, exp, register_commands, register_models
 
