@@ -72,7 +72,7 @@ Depois de configurar o endpoint, execute somente o fluxo nativo de autenticaçã
 /connect
 ```
 
-Selecione **Gateway experimental (exp)**, o método **Token do gateway**
+Selecione **Gateway EXP**, o método **Token do gateway**
 e informe o token no prompt nativo. O token não é aceito na configuração do
 plugin e não deve ser digitado no histórico de comandos, variáveis de ambiente
 ou prompts de sessão.
