@@ -22,7 +22,7 @@ export default Plugin.define({
         method: { type: "key", label: "Token do gateway" },
       })
       editor.update(INTEGRATION_ID, (integration) => {
-        integration.name = "Gateway experimental (exp)"
+        integration.name = "Gateway EXP"
       })
     })
 
