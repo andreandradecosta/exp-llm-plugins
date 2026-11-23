@@ -84,7 +84,7 @@ versão da tag, e diz no log o que foi ignorado por divergência. Ao alterar a
 versão, atualize os três manifestos e crie a tag correspondente:
 
 ```sh
-git tag v1.0.1 && git push origin v1.0.1   # npmjs: opencode e pi; PyPI: llm-exp-gateway
+git tag v1.0.2 && git push origin v1.0.2   # npmjs: opencode e pi; PyPI: llm-exp-gateway
 ```
 
 Os pacotes JavaScript são distribuídos apenas pelo npmjs, de onde tanto o

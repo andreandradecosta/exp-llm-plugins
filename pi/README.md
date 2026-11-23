@@ -21,7 +21,7 @@ pi install /caminho/absoluto/para/pi
 Após a publicação no npm, também poderá ser instalado por:
 
 ```bash
-pi install npm:pi-llm-gateway@1.0.1
+pi install npm:pi-llm-gateway@1.0.2
 ```
 
 Os pacotes `@earendil-works/pi-coding-agent` e

@@ -1,6 +1,6 @@
 {
   "name": "pi-llm-gateway",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Dynamic EXP OpenAI-compatible provider for Pi",
   "type": "module",
   "keywords": [

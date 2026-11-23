@@ -1,6 +1,6 @@
 {
   "name": "opencode-llm-gateway",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "OpenCode V2 provider for an internal OpenAI-compatible gateway",
   "type": "module",
   "engines": {
