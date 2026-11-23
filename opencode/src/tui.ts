@@ -6,16 +6,22 @@ export default Plugin.define({
   setup(context) {
     const location = () => context.location ?? context.data.location.default()
 
-    const invalidate = () => {
-      context.data.location.model.invalidate(location())
-      context.data.location.provider.invalidate(location())
-      context.data.location.integration.invalidate(location())
+    const invalidateAndSync = async (): Promise<void> => {
+      const current = location()
+      context.data.location.model.invalidate(current)
+      context.data.location.provider.invalidate(current)
+      context.data.location.integration.invalidate(current)
+      await Promise.all([
+        context.data.location.model.sync(current),
+        context.data.location.provider.sync(current),
+        context.data.location.integration.sync(current),
+      ])
     }
 
     const refresh = async (automatic: boolean): Promise<ExpStatus | undefined> => {
       try {
         const status = asExpStatus(await context.client.rpc(ExpRpc).refresh({}))
-        invalidate()
+        await invalidateAndSync()
         if (automatic && status.lastError) {
           context.ui.toast.show({
             title: "Gateway (exp)",
@@ -58,7 +64,7 @@ export default Plugin.define({
               if (endpoint === undefined) return
 
               const status = asExpStatus(await context.client.rpc(ExpRpc).configure({ endpoint }))
-              invalidate()
+              await invalidateAndSync()
               showResult((options) => context.ui.toast.show(options), status, "Endpoint salvo e catálogo atualizado.")
             } catch {
               context.ui.toast.show({
