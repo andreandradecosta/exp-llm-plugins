@@ -5,6 +5,7 @@ export default Plugin.define({
   id: "exp.gateway.tui",
   setup(context) {
     const location = () => context.location ?? context.data.location.default()
+    const rpcOptions = () => ({ location: { directory: location().directory } })
 
     const invalidateAndSync = async (): Promise<void> => {
       const current = location()
@@ -20,7 +21,7 @@ export default Plugin.define({
 
     const refresh = async (automatic: boolean): Promise<ExpStatus | undefined> => {
       try {
-        const status = asExpStatus(await context.client.rpc(ExpRpc).refresh({}))
+        const status = asExpStatus(await context.client.rpc(ExpRpc).refresh({}, rpcOptions()))
         await invalidateAndSync()
         if (automatic && status.lastError) {
           context.ui.toast.show({
@@ -54,7 +55,7 @@ export default Plugin.define({
           slash: { name: "exp-setup" },
           run: async () => {
             try {
-              const current = asExpStatus(await context.client.rpc(ExpRpc).status({}))
+              const current = asExpStatus(await context.client.rpc(ExpRpc).status({}, rpcOptions()))
               const endpoint = await context.ui.dialog.prompt({
                 title: "Endpoint do gateway",
                 description: "Use uma URL http(s), com ou sem /v1. O token NÃO deve ser informado aqui.",
@@ -63,7 +64,7 @@ export default Plugin.define({
               })
               if (endpoint === undefined) return
 
-              const status = asExpStatus(await context.client.rpc(ExpRpc).configure({ endpoint }))
+              const status = asExpStatus(await context.client.rpc(ExpRpc).configure({ endpoint }, rpcOptions()))
               await invalidateAndSync()
               showResult((options) => context.ui.toast.show(options), status, "Endpoint salvo e catálogo atualizado.")
             } catch {
@@ -94,7 +95,7 @@ export default Plugin.define({
           slash: { name: "exp-status" },
           run: async () => {
             try {
-              const status = asExpStatus(await context.client.rpc(ExpRpc).status({}))
+              const status = asExpStatus(await context.client.rpc(ExpRpc).status({}, rpcOptions()))
               await context.ui.dialog.alert({
                 title: "Gateway (exp)",
                 message: formatStatus(status),

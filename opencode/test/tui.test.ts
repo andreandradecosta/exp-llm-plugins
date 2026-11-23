@@ -23,6 +23,7 @@ const refreshed: ExpStatus = {
 test("abertura do TUI invalida e sincroniza o catálogo atualizado pelo server", { timeout: 1000 }, async () => {
   const location = { directory: "/tmp/opencode/tui-refresh" }
   const operations: string[] = []
+  let refreshArguments: unknown[] | undefined
   let complete!: () => void
   const synchronized = new Promise<void>((resolve) => {
     complete = resolve
@@ -45,7 +46,8 @@ test("abertura do TUI invalida e sincroniza o catálogo atualizado pelo server",
       rpc: (definition: unknown) => {
         assert.equal(definition, ExpRpc)
         return {
-          refresh: async () => {
+          refresh: async (...args: unknown[]) => {
+            refreshArguments = args
             operations.push("rpc:refresh")
             return refreshed
           },
@@ -71,6 +73,7 @@ test("abertura do TUI invalida e sincroniza o catálogo atualizado pelo server",
   await tuiPlugin.setup(context)
   await synchronized
 
+  assert.deepEqual(refreshArguments, [{}, { location: { directory: location.directory } }])
   assert.deepEqual(operations, [
     "rpc:refresh",
     "model:invalidate",

@@ -88,12 +88,13 @@ Comandos disponíveis:
   a última falha segura, sem mostrar o token.
 
 O TUI chama o RPC de refresh ao abrir, pois o server compartilhado pode continuar
-ativo entre sessões do TUI. Ao concluir o RPC, ele invalida e sincroniza os dados
-de modelos, providers e integrações, portanto `/models` reflete o novo catálogo
-sem exigir `opencode service restart`. A inicialização do server também solicita
-a atualização do catálogo. Eventos nativos `credential.updated` e
-`credential.switched` fazem novas descobertas após login, troca ou remoção da
-conta, desde que o endpoint esteja configurado.
+ativo entre sessões do TUI. O RPC e a sincronização usam a location ativa, para
+atualizar a mesma instância do provider exibida pelo seletor. Ao concluir o RPC,
+ele invalida e sincroniza os dados de modelos, providers e integrações, portanto
+`/models` reflete o novo catálogo sem exigir `opencode service restart`. A
+inicialização do server também solicita a atualização do catálogo. Eventos
+nativos `credential.updated` e `credential.switched` fazem novas descobertas
+após login, troca ou remoção da conta, desde que o endpoint esteja configurado.
 
 ## Descoberta e metadados
 
