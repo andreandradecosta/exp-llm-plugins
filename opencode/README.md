@@ -15,7 +15,7 @@ Depois de publicar este pacote no npm, instale-o globalmente pela CLI do
 OpenCode:
 
 ```sh
-opencode plugin add opencode-llm-gateway@1.0.0
+opencode plugin add opencode-llm-gateway@1.0.1
 opencode plugin list
 ```
 
